@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>處置股回測</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f6f4;
+  --surface: #fcfcfb;
+  --border: #e3e2dc;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #85847e;
+  --bar: #2a78d6;
+  --bar-dim: #a9c6ea;
+  --ref: #85847e;
+  --up: #d23c3c;     /* 台股慣例：紅漲 */
+  --down: #12864b;   /* 綠跌 */
+  --hl: #fff4d6;
+  --chip: #eeede8;
+  --chip-on: #0b0b0b;
+  --chip-on-text: #fcfcfb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --border: #2e2e2b;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8c8b84;
+    --bar: #3987e5; --bar-dim: #2c4d75; --ref: #8c8b84;
+    --up: #f06a6a; --down: #3fbf7f; --hl: #3a3215;
+    --chip: #262624; --chip-on: #f0efec; --chip-on-text: #1a1a19;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --border: #2e2e2b;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8c8b84;
+  --bar: #3987e5; --bar-dim: #2c4d75; --ref: #8c8b84;
+  --up: #f06a6a; --down: #3fbf7f; --hl: #3a3215;
+  --chip: #262624; --chip-on: #f0efec; --chip-on-text: #1a1a19;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 -apple-system, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: .02em; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+.sub { color: var(--text-2); margin: 0; }
+.meta { color: var(--text-3); font-size: 13px; margin-top: 6px; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.tile .lab { color: var(--text-2); font-size: 13px; }
+.tile .big { font-size: 22px; font-weight: 650; margin: 2px 0; }
+.tile .note { color: var(--text-3); font-size: 12.5px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin-bottom: 14px; }
+.controls .lab { color: var(--text-2); font-size: 13px; margin-right: 6px; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.seg button { border: 0; background: var(--chip); color: var(--text); padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 13.5px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-text); }
+select { font: inherit; font-size: 13.5px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.chart { position: relative; }
+.row { display: grid; grid-template-columns: 128px 1fr 64px; align-items: center; gap: 10px; height: 30px; }
+.row .name { font-size: 13.5px; text-align: right; color: var(--text-2); white-space: nowrap; }
+.row .track { position: relative; height: 100%; }
+.row .fill { position: absolute; left: 0; top: 7px; height: 16px; background: var(--bar); border-radius: 0 4px 4px 0; }
+.row.weak .fill { background: var(--bar-dim); }
+.row .val { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.row:hover { background: color-mix(in srgb, var(--chip) 70%, transparent); border-radius: 6px; }
+.ref { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--ref); pointer-events: none; }
+.ref span { position: absolute; top: -18px; left: -14px; font-size: 11.5px; color: var(--text-3); }
+.axis { display: grid; grid-template-columns: 128px 1fr 64px; gap: 10px; color: var(--text-3); font-size: 11.5px; }
+.axis div:nth-child(2) { display: flex; justify-content: space-between; }
+.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; min-width: 180px; }
+.tip b { display: block; margin-bottom: 2px; }
+.tip .k { color: var(--text-2); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; font-size: 12.5px; }
+th:first-child, td:first-child, td.l, th.l { text-align: left; }
+tr.best td { background: var(--hl); }
+.scroll { overflow-x: auto; }
+.up { color: var(--up); } .down { color: var(--down); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--text-2); margin: 1px 2px; }
+.tag.go { background: var(--hl); color: var(--text); font-weight: 600; }
+.muted { color: var(--text-3); }
+.small { font-size: 12.5px; color: var(--text-3); }
+details summary { cursor: pointer; color: var(--text-2); }
+ul.notes { margin: 8px 0 0; padding-left: 20px; color: var(--text-2); font-size: 13.5px; }
+.empty { color: var(--text-3); padding: 12px 0; }
+@media (max-width: 560px) {
+  .row, .axis { grid-template-columns: 96px 1fr 52px; gap: 6px; }
+  .row .name { font-size: 12.5px; }
+  section { padding: 16px 12px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>處置股回測</h1>
+  <p class="sub">處置新制（5 個營業日、約每 2 分鐘撮合）上路後，各種買點的勝率與報酬。每天盤後自動更新。</p>
+  <p class="meta" id="meta">載入中…</p>
+
+  <section>
+    <h2>目前最佳買點</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section>
+    <h2>今天的訊號</h2>
+    <p class="small" style="margin:-6px 0 10px">處置中、剛公告，或出關 10 個交易日內的股票。<span class="tag go">黃底</span>＝今天觸發該分組回測最佳的買點。</p>
+    <div class="scroll"><table id="live"></table></div>
+  </section>
+
+  <section>
+    <h2>各買點勝率</h2>
+    <div class="controls">
+      <div><span class="lab">分組</span><span class="seg" id="segGroup"></span></div>
+      <div><span class="lab">持有</span><span class="seg" id="segHold"></span></div>
+    </div>
+    <div class="axis"><div></div><div><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div></div></div>
+    <div class="chart" id="chart"></div>
+    <p class="small">淡色長條＝樣本少於 15 件，參考就好。虛線＝50%。滑過長條看平均、中位數、最大回檔。</p>
+    <div class="scroll" style="margin-top:12px"><table id="stats"></table></div>
+  </section>
+
+  <section>
+    <h2>逐筆事件</h2>
+    <div class="controls">
+      <div><span class="lab">買點</span><select id="selEntry"></select></div>
+      <div><span class="lab">分組</span><span class="seg" id="segGroup2"></span></div>
+    </div>
+    <div class="scroll"><table id="events"></table></div>
+  </section>
+
+  <section>
+    <details>
+      <summary>回測方法與限制</summary>
+      <ul class="notes" id="notes"></ul>
+    </details>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const pct = (x, d = 1) => x == null ? '—' : (x * 100).toFixed(d) + '%';
+const sgn = (x, d = 1) => x == null ? '—' : (x > 0 ? '+' : '') + (x * 100).toFixed(d) + '%';
+const cls = x => x == null ? '' : x > 0 ? 'up' : x < 0 ? 'down' : '';
+const MIN_N = 15;
+const state = { group: 'all', hold: '5', group2: 'all', entry: 'A' };
+let D;
+
+function seg(el, items, key, on) {
+  el.innerHTML = '';
+  for (const [k, label] of items) {
+    const b = document.createElement('button');
+    b.textContent = label; b.setAttribute('aria-pressed', state[key] === k);
+    b.onclick = () => { state[key] = k; on(); };
+    el.appendChild(b);
+  }
+}
+const entryName = k => (D.entries.find(e => e.key === k) || {}).name || k;
+const inGroup = (e, g) => ({ all: true, k1: e.k === 1, k2: e.k === 2,
+  hb: e.bias20 != null && e.bias20 > .25, lb: e.bias20 != null && e.bias20 <= .25,
+  twse: e.market === 'twse', tpex: e.market === 'tpex' })[g];
+
+function renderMeta() {
+  const n = D.events.length;
+  $('#meta').textContent = `新制起算 ${D.ruleStart} · 最後交易日 ${D.lastTradingDate || '—'} · 共 ${n} 件處置（上市 ${D.events.filter(e=>e.market==='twse').length}、上櫃 ${D.events.filter(e=>e.market==='tpex').length}）· 更新於 ${D.generatedAt.replace('T',' ').slice(0,16)}`;
+}
+
+function renderTiles() {
+  const t = $('#tiles'); t.innerHTML = '';
+  for (const g of ['k1', 'k2', 'all']) {
+    const b5 = D.best5[g], b10 = D.best10[g];
+    const name = D.groups.find(x => x.key === g).name;
+    const div = document.createElement('div'); div.className = 'tile';
+    div.innerHTML = b5 ? `<div class="lab">${name}・抱 5 天</div>
+      <div class="big">${entryName(b5.entry)}</div>
+      <div class="note">勝率 ${pct(b5.win, 0)} · 中位數 <span class="${cls(b5.median)}">${sgn(b5.median)}</span> · n=${b5.n}</div>
+      ${b10 ? `<div class="note">抱 10 天最佳：${entryName(b10.entry)}（${pct(b10.win,0)}）</div>` : ''}`
+      : `<div class="lab">${name}</div><div class="note">樣本還不夠（每個買點至少 ${MIN_N} 件才列入）</div>`;
+    t.appendChild(div);
+  }
+}
+
+function renderLive() {
+  const rows = [
+    ...D.upcoming.map(e => ({ ...e })),
+    ...D.events.filter(e => e.signals),
+  ].sort((a, b) => (b.start > a.start ? 1 : -1));
+  const t = $('#live');
+  if (!rows.length) { t.innerHTML = '<tr><td class="empty">目前沒有處置中的股票</td></tr>'; return; }
+  const statusTxt = e => e.status === 'announced' ? '已公告，尚未開始'
+    : e.status && e.status.startsWith('day') ? `處置第 ${e.status.slice(3)} 天` : '已出關';
+  let h = '<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th class="l">狀態</th><th>收盤</th><th>處置前乖離月線</th><th class="l">今天觸發</th></tr>';
+  for (const e of rows) {
+    const best = (D.best5[e.k === 1 ? 'k1' : 'k2'] || {}).entry;
+    const sigs = Object.keys(e.signals || {});
+    const tags = sigs.length ? sigs.map(k => `<span class="tag ${k === best ? 'go' : ''}">${entryName(k)}</span>`).join('') : '<span class="muted">—</span>';
+    h += `<tr><td class="l">${e.code} ${e.name}</td><td class="l">${e.market === 'twse' ? '上市' : '上櫃'}</td>
+      <td class="l">${e.k === 1 ? '第一次' : '第二次'}</td><td class="l">${e.start.slice(5)} ~ ${e.end.slice(5)}</td>
+      <td class="l">${statusTxt(e)}</td><td>${e.lastClose ?? '—'}</td><td class="${cls(e.bias20)}">${sgn(e.bias20)}</td><td class="l">${tags}</td></tr>`;
+  }
+  t.innerHTML = h;
+}
+
+function renderChart() {
+  seg($('#segGroup'), D.groups.map(g => [g.key, g.name]), 'group', renderChart);
+  seg($('#segHold'), D.holds.map(h => [String(h), `${h} 天`]), 'hold', renderChart);
+  const S = D.stats[state.group]; const H = state.hold;
+  const c = $('#chart'); c.innerHTML = '';
+  const best = Object.entries(S).filter(([, v]) => v[H] && v[H].n >= MIN_N).sort((a, b) => b[1][H].win - a[1][H].win)[0];
+  for (const e of D.entries) {
+    const v = S[e.key] && S[e.key][H];
+    const row = document.createElement('div');
+    row.className = 'row' + (!v || v.n < MIN_N ? ' weak' : '');
+    row.innerHTML = `<div class="name">${e.name}</div><div class="track">${v ? `<div class="fill" style="width:${v.win * 100}%"></div>` : ''}</div>
+      <div class="val">${v ? pct(v.win, 0) : '—'}</div>`;
+    if (v) {
+      row.onmousemove = ev => showTip(ev, `<b>${e.name}・抱 ${H} 天</b>
+        <div><span class="k">勝率</span> ${pct(v.win, 0)}（n=${v.n}）</div>
+        <div><span class="k">平均</span> <span class="${cls(v.mean)}">${sgn(v.mean)}</span>　<span class="k">中位數</span> <span class="${cls(v.median)}">${sgn(v.median)}</span></div>
+        <div><span class="k">平均最大回檔</span> <span class="down">${sgn(v.dd)}</span></div>
+        <div class="k" style="margin-top:4px;font-size:12px">${e.desc}</div>`);
+      row.onmouseleave = hideTip;
+    }
+    c.appendChild(row);
+  }
+  const ref = document.createElement('div'); ref.className = 'ref';
+  const track = c.querySelector('.track');
+  ref.style.left = (track.offsetLeft + track.offsetWidth / 2) + 'px';
+  c.appendChild(ref);
+
+  let h = '<tr><th class="l">買點</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>中位數</th><th>平均最大回檔</th></tr>';
+  for (const e of D.entries) {
+    const v = S[e.key] && S[e.key][H]; if (!v) continue;
+    h += `<tr class="${best && best[0] === e.key ? 'best' : ''}"><td class="l">${e.name}</td><td>${v.n}</td><td>${pct(v.win, 0)}</td>
+      <td class="${cls(v.mean)}">${sgn(v.mean)}</td><td class="${cls(v.median)}">${sgn(v.median)}</td><td class="down">${sgn(v.dd)}</td></tr>`;
+  }
+  $('#stats').innerHTML = h;
+}
+
+function renderEvents() {
+  seg($('#segGroup2'), D.groups.map(g => [g.key, g.name]), 'group2', renderEvents);
+  const sel = $('#selEntry');
+  if (!sel.options.length) {
+    for (const e of D.entries) sel.add(new Option(e.name, e.key));
+    sel.value = state.entry; sel.onchange = () => { state.entry = sel.value; renderEvents(); };
+  }
+  const k = state.entry;
+  const evs = D.events.filter(e => inGroup(e, state.group2)).slice().sort((a, b) => b.start.localeCompare(a.start));
+  let h = `<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th>乖離月線</th><th class="l">買進日</th>${D.holds.map(x => `<th>${x} 天</th>`).join('')}</tr>`;
+  for (const e of evs) {
+    const r = e.r[k];
+    h += `<tr><td class="l">${e.code} ${e.name}</td><td class="l">${e.market === 'twse' ? '上市' : '上櫃'}</td><td class="l">${e.k === 1 ? '第一次' : '第二次'}</td>
+      <td class="l">${e.start.slice(5)} ~ ${e.end.slice(5)}</td><td class="${cls(e.bias20)}">${sgn(e.bias20)}</td>
+      <td class="l">${r ? r.d.slice(5) : '<span class="muted">未觸發</span>'}</td>
+      ${D.holds.map(x => { const v = r && r[x]; const net = v ? v[0] - D.cost : null; return `<td class="${cls(net)}">${v ? sgn(net) : '<span class="muted">—</span>'}</td>`; }).join('')}</tr>`;
+  }
+  $('#events').innerHTML = evs.length ? h : '<tr><td class="empty">沒有事件</td></tr>';
+}
+
+function showTip(ev, html) { const t = $('#tip'); t.innerHTML = html; t.style.display = 'block';
+  const x = Math.min(ev.clientX + 14, innerWidth - t.offsetWidth - 8); t.style.left = x + 'px'; t.style.top = (ev.clientY + 14) + 'px'; }
+function hideTip() { $('#tip').style.display = 'none'; }
+
+function renderNotes() {
+  $('#notes').innerHTML = [
+    `只納入 ${D.ruleStart} 之後開始的處置（新制），普通股（4 碼），排除權證、ETF 與「人工管制撮合」類。`,
+    `報酬一律扣 ${(D.cost * 100).toFixed(1)}% 交易成本（手續費買賣各 0.1425% + 證交稅 0.3%）。「勝率」＝扣成本後報酬 > 0 的比例。`,
+    '收盤買：以當天收盤價買，抱 N 天＝第 N 個交易日收盤賣。開盤買：以當天開盤價買，含當天共 N 個交易日後收盤賣。',
+    '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
+    '跌破均線類買點只在處置開始到出關後 10 個交易日內找第一次觸發，沒觸發的不算進樣本，所以樣本數會比較少。',
+    '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞，不要只看絕對報酬。歷史回測不代表未來，不構成投資建議。',
+  ].map(s => `<li>${s}</li>`).join('');
+}
+
+fetch('data.json', { cache: 'no-store' }).then(r => r.json()).then(d => {
+  D = d; renderMeta(); renderTiles(); renderLive(); renderChart(); renderEvents(); renderNotes();
+}).catch(e => { $('#meta').textContent = '讀取 data.json 失敗：' + e; });
+addEventListener('resize', () => D && renderChart());
+</script>
+</body>
+</html>
