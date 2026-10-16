@@ -1,6 +1,6 @@
 /**
  * 處置股回測：處置新制（2026-08-10 起，5 個營業日、約每 2 分鐘撮合）上路後，各種買點的勝率／報酬
- * 執行：GitHub Actions 每個交易日 18:40 自動跑（.github/workflows/backtest.yml）；本機可用 node backtest.mjs
+ * 執行：GitHub Actions 每個交易日 19:40 自動跑（.github/workflows/backtest.yml）；本機可用 node backtest.mjs
  * 注意：資料在收盤後才更新，所以「要看當天收盤才成立」的訊號（收黑、跌破均線）一律以隔天開盤價回測，
  *      公告日收盤因公告在收盤後才出來，只當參考、不列入最佳買點。
  * 輸出：data.js（index.html 讀取；GitHub Pages 發佈成網頁，本機雙擊 index.html 也能看）
@@ -256,6 +256,62 @@ function bestOf(stats, H) {
   return best;
 }
 
+
+/* ---------------- 公告日預判（讀戰情室「處置股雷達」的注意累計） ---------------- */
+// 戰情室資料來源：1) 本機旁邊的 twstock-warroom 資料夾 2) GitHub raw 3) 網站編碼檔（.bin）
+const WARROOM_LOCAL = path.join(ROOT, "..", "twstock-warroom", "public", "data");
+const WARROOM_RAW = "https://raw.githubusercontent.com/justice-hung/twstock-warroom/main/public/data";
+const WARROOM_SITE = "https://warroom.justice-hung.win/data";
+const zlib = await import("node:zlib");
+function decodeBin(buf, name) { // 與戰情室 scripts/encode-data.mjs 相同演算法
+  const K = [0x74, 0x77, 0x2d, 0x77, 0x72, 0x2d, 0x32, 0x30, 0x32, 0x36, 0x2d, 0x6a, 0x68];
+  let h = 0x811c9dc5;
+  const str = String.fromCharCode(...K) + "/" + name;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  let x = h || 1;
+  const b = Uint8Array.from(buf);
+  for (let i = 0; i < b.length; i++) { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; b[i] ^= x & 0xff; }
+  return JSON.parse(zlib.inflateRawSync(Buffer.from(b)).toString("utf8"));
+}
+async function warroomData(name) {
+  try { return JSON.parse(fs.readFileSync(path.join(WARROOM_LOCAL, `${name}.json`), "utf8")); } catch { /* 下一個來源 */ }
+  try { const r = await fetch(`${WARROOM_RAW}/${name}.json`, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000) }); if (r.ok) return await r.json(); } catch { /* 下一個來源 */ }
+  try {
+    const r = await fetch(`${WARROOM_SITE}/${name}.bin`, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000) });
+    if (r.ok && !(r.headers.get("content-type") || "").includes("html")) return decodeBin(Buffer.from(await r.arrayBuffer()), name);
+  } catch { /* 沒有 */ }
+  return null;
+}
+// 雷達的 watch 列：[代號,名稱,市場,收盤,漲跌%,連續第一款,連續1~8款,10日內,30日內,還差次數,接近規則,任一款即算,今日款次,近10日軌跡,觸發價,處置中]
+const predCat = (r) => (!/第一款/.test(r[10]) ? "other" : r[14]?.always ? "always" : "price");
+async function predictions(events, tradeDays) {
+  const latest = await warroomData("latest");
+  const X = latest?.disposition;
+  if (!X?.watch) return { ok: false, note: "讀不到戰情室的處置股雷達資料" };
+  const cands = X.watch.filter((r) => r[9] === 1).map((r) => ({
+    code: r[0], name: r[1], mkt: r[2], close: r[3], pct: r[4], k: r[15] ? 2 : 1, cat: predCat(r),
+    rule: r[10], todayK: r[12], tr: r[14] || {},
+  }));
+  // 命中率：用戰情室每天的快照，看「明天再1次即處置」的股票，下個交易日是否真的公告處置
+  const pubs = new Set(events.map((e) => `${e.code}|${e.pub}`));
+  const hit = {};
+  let days = 0;
+  for (const d of tradeDays.slice(-40)) {
+    const snap = await warroomData(d);
+    const W = snap?.disposition;
+    if (!W?.watch || !W.next || W.next > tradeDays[tradeDays.length - 1]) continue; // 結果還沒出來的不算
+    days++;
+    for (const r of W.watch) {
+      if (r[9] !== 1) continue;
+      const key = predCat(r) + (r[15] ? "_in" : "");
+      const h = (hit[key] = hit[key] || { n: 0, hit: 0 });
+      h.n++;
+      if (pubs.has(`${r[0]}|${W.next}`)) h.hit++;
+    }
+  }
+  return { ok: true, asOf: X.asOf, next: X.next, cands, hit, days };
+}
+
 /* ---------------- 主程式 ---------------- */
 async function main() {
   const t0 = Date.now();
@@ -304,6 +360,10 @@ async function main() {
     }
   }
   const stats = aggregate(events);
+  const tradeDays = [...new Set([...barsOf.values()].flatMap((b) => b.map((x) => x.d)))].sort().filter((d) => d >= RULE_START);
+  let predict = { ok: false, note: "" };
+  try { predict = await predictions([...events, ...upcoming], tradeDays); } catch (e) { predict = { ok: false, note: e.message }; }
+  console.log(predict.ok ? `   └ 公告日預判：明天候選 ${predict.cands.length} 檔（命中率用 ${predict.days} 天快照計算）` : `   ⚠ 公告日預判：${predict.note}`);
   const lastDate = [...barsOf.values()].reduce((m, b) => (b.length && b[b.length - 1].d > (m || "") ? b[b.length - 1].d : m), null);
   const out = {
     generatedAt: `${todayIso} ${pad(today.getHours())}:${pad(today.getMinutes())}`,
@@ -315,6 +375,7 @@ async function main() {
     stats,
     best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),
     events: [...events, ...upcoming],
+    predict,
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `window.DISP_BT = ${JSON.stringify(out)};\n`);

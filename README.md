@@ -2,7 +2,7 @@
 
 網頁：https://justice-hung.github.io/disposition-backtest/ （手機也能看）
 
-GitHub Actions 每個交易日台灣時間 18:40 自動抓證交所／櫃買的處置公告與日 K、重算回測，
+GitHub Actions 每個交易日台灣時間 19:40 自動抓證交所／櫃買的處置公告與日 K、重算回測，
 推回 repo 後 GitHub Pages 自動更新網頁，電腦不用開著。
 
 ## 檔案

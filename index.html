@@ -5,147 +5,185 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>處置股回測</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
 :root {
-  color-scheme: light;
-  --bg: #f6f6f4;
-  --surface: #fcfcfb;
-  --border: #e3e2dc;
-  --text: #0b0b0b;
-  --text-2: #52514e;
-  --text-3: #85847e;
-  --bar: #2a78d6;
-  --bar-dim: #a9c6ea;
-  --ref: #85847e;
-  --up: #d23c3c;     /* 台股慣例：紅漲 */
-  --down: #12864b;   /* 綠跌 */
-  --hl: #fff4d6;
-  --top: #e0a100;
-  --chip: #eeede8;
-  --chip-on: #0b0b0b;
-  --chip-on-text: #fcfcfb;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #121211; --surface: #1a1a19; --border: #2e2e2b;
-    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8c8b84;
-    --bar: #3987e5; --bar-dim: #2c4d75; --ref: #8c8b84;
-    --up: #f06a6a; --down: #3fbf7f; --hl: #3a3215; --top: #f2b630;
-    --chip: #262624; --chip-on: #f0efec; --chip-on-text: #1a1a19;
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #121211; --surface: #1a1a19; --border: #2e2e2b;
-  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8c8b84;
-  --bar: #3987e5; --bar-dim: #2c4d75; --ref: #8c8b84;
-  --up: #f06a6a; --down: #3fbf7f; --hl: #3a3215; --top: #f2b630;
-  --chip: #262624; --chip-on: #f0efec; --chip-on-text: #1a1a19;
+  --bg: #0f172a; --card: #1e293b; --card2: #172033; --line: #334155; --line2: #263247;
+  --t1: #f1f5f9; --t2: #cbd5e1; --t3: #94a3b8; --t4: #64748b;
+  --up: #f87171; --down: #34d399;            /* 台股：紅漲綠跌 */
+  --gA: #fbbf24; --gB: #38bdf8; --gC: #94a3b8; --gD: #64748b;
+  --sky: #38bdf8; --amber: #fbbf24; --rose: #fb7185;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text);
-  font: 15px/1.55 -apple-system, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
-main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
-h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: .02em; }
-h2 { font-size: 18px; margin: 0 0 12px; }
-.sub { color: var(--text-2); margin: 0; }
-.meta { color: var(--text-3); font-size: 13px; margin-top: 6px; }
-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 16px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.tile { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-.tile .lab { color: var(--text-2); font-size: 13px; }
-.tile .big { font-size: 22px; font-weight: 650; margin: 2px 0; }
-.tile .note { color: var(--text-3); font-size: 12.5px; }
-.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin-bottom: 14px; }
-.controls .lab { color: var(--text-2); font-size: 13px; margin-right: 6px; }
-.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.seg button { border: 0; background: var(--chip); color: var(--text); padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 13.5px; cursor: pointer; }
-.seg button[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-text); }
-select { font: inherit; font-size: 13.5px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
-.chart { position: relative; }
-.row { display: grid; grid-template-columns: 128px 1fr 64px; align-items: center; gap: 10px; height: 30px; }
-.row .name { font-size: 13.5px; text-align: right; color: var(--text-2); white-space: nowrap; }
-.row .track { position: relative; height: 100%; }
-.row .fill { position: absolute; left: 0; top: 7px; height: 16px; background: var(--bar); border-radius: 0 4px 4px 0; }
-.row.weak .fill { background: var(--bar-dim); }
-.row .val { font-size: 13.5px; font-variant-numeric: tabular-nums; }
-.row:hover { background: color-mix(in srgb, var(--chip) 70%, transparent); border-radius: 6px; }
-.ref { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--ref); pointer-events: none; }
-.ref span { position: absolute; top: -18px; left: -14px; font-size: 11.5px; color: var(--text-3); }
-.axis { display: grid; grid-template-columns: 128px 1fr 64px; gap: 10px; color: var(--text-3); font-size: 11.5px; }
-.axis div:nth-child(2) { display: flex; justify-content: space-between; }
-.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border);
-  box-shadow: 0 6px 20px rgba(0,0,0,.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; min-width: 180px; }
-.tip b { display: block; margin-bottom: 2px; }
-.tip .k { color: var(--text-2); }
-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
-th { color: var(--text-2); font-weight: 500; font-size: 12.5px; }
-th:first-child, td:first-child, td.l, th.l { text-align: left; }
-tr.best td { background: var(--hl); }
+html, body { margin: 0; background: var(--bg); color: var(--t2); }
+body { font: 15px/1.55 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at top, rgba(56,189,248,.10), transparent 55%); }
+main { position: relative; max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--t4); }
+
+/* header */
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+h1 { margin: 0; font-size: 26px; font-weight: 900; color: #fff; letter-spacing: .04em; }
+h1 small { font-size: 13px; font-weight: 500; color: var(--t3); letter-spacing: .02em; margin-left: 8px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; background: rgba(30,41,59,.85);
+  border: 1px solid var(--line); font-size: 12.5px; color: var(--t3); }
+.pill b { color: var(--t1); font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; }
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: rgba(15,23,42,.8); border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; color: var(--t3); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: rgba(56,189,248,.18); color: #e0f2fe; box-shadow: inset 0 0 0 1px rgba(56,189,248,.45); }
+.holdbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--t3); }
+
+/* section card */
+section { position: relative; background: var(--card); border: 1px solid rgba(51,65,85,.7); border-radius: 16px; margin-top: 16px; overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,.2); }
+section::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, var(--accent, var(--sky)), transparent 70%); }
+.sh { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid rgba(51,65,85,.6); }
+.sh h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--t1); }
+.sh p { margin: 2px 0 0; font-size: 12.5px; color: var(--t3); }
+.sb { padding: 16px 18px; }
+
+/* grade badge */
+.g { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 6px; border-radius: 6px;
+  font: 700 12px var(--mono); }
+.gA { background: rgba(251,191,36,.18); color: var(--gA); box-shadow: inset 0 0 0 1px rgba(251,191,36,.5); }
+.gB { background: rgba(56,189,248,.15); color: var(--gB); box-shadow: inset 0 0 0 1px rgba(56,189,248,.4); }
+.gC { background: rgba(148,163,184,.12); color: var(--gC); box-shadow: inset 0 0 0 1px rgba(148,163,184,.3); }
+.gD { background: rgba(100,116,139,.12); color: var(--gD); box-shadow: inset 0 0 0 1px rgba(100,116,139,.3); text-decoration: line-through; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--t3); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* plan columns */
+.plan { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.col { background: var(--card2); border: 1px solid var(--line2); border-radius: 12px; padding: 12px; min-width: 0; }
+.colh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 2px 2px 10px; }
+.colh b { color: var(--t1); font-size: 14.5px; }
+.colh span { font-size: 11.5px; color: var(--t4); }
+.tcard { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 11px; border-radius: 10px;
+  background: rgba(15,23,42,.55); border: 1px solid var(--line2); margin-bottom: 8px; }
+.tcard.best { border-color: rgba(251,191,36,.55); background: linear-gradient(135deg, rgba(251,191,36,.10), rgba(15,23,42,.55) 60%); }
+.tcard.weak { opacity: .55; }
+.tcard .code { font: 700 13px var(--mono); color: var(--sky); }
+.tcard .nm { font-weight: 700; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcard .tags { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; font-size: 11.5px; color: var(--t3); }
+.tcard .what { grid-column: 1 / 4; font-size: 13px; color: var(--t2); }
+.tcard .what b { color: var(--t1); }
+.tcard .stat { grid-column: 1 / 4; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--t3); }
+.chip { display: inline-block; padding: 0 6px; border-radius: 5px; font-size: 11px; line-height: 18px; background: rgba(51,65,85,.6); color: var(--t2); }
+.chip.k2 { background: rgba(251,113,133,.15); color: #fda4af; }
+.chip.mk { background: rgba(59,130,246,.18); color: #93c5fd; }
+.chip.mk.o { background: rgba(168,85,247,.18); color: #d8b4fe; }
+.star { color: var(--amber); font-weight: 700; font-size: 12px; }
+.more { width: 100%; margin-top: 2px; border: 1px dashed var(--line); background: transparent; color: var(--t3); font: inherit; font-size: 12.5px; padding: 7px; border-radius: 8px; cursor: pointer; }
+.more:hover { color: var(--t1); border-color: var(--t4); }
+.empty { color: var(--t4); font-size: 13px; padding: 10px 4px; }
+.warn { font-size: 12px; color: #fcd34d; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; line-height: 1.6; }
+
+/* best tiles */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tile { position: relative; overflow: hidden; border-radius: 12px; padding: 12px 14px 12px 18px; background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid rgba(51,65,85,.8); }
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c, var(--amber)); }
+.tile .l { font-size: 12px; color: var(--t3); }
+.tile .v { font-size: 21px; font-weight: 900; color: #fff; margin: 2px 0; }
+.tile .s { font-size: 12px; color: var(--t3); }
+
+/* heatmap */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { border: 1px solid var(--line); background: rgba(15,23,42,.6); color: var(--t3); font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: rgba(56,189,248,.18); color: #e0f2fe; border-color: rgba(56,189,248,.55); }
 .scroll { overflow-x: auto; }
-.up { color: var(--up); } .down { color: var(--down); }
-.tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--text-2); margin: 1px 2px; }
-.tag.go { background: var(--hl); color: var(--text); font-weight: 600; }
-.muted { color: var(--text-3); }
-.small { font-size: 12.5px; color: var(--text-3); }
-details summary { cursor: pointer; color: var(--text-2); }
-ul.notes { margin: 8px 0 0; padding-left: 20px; color: var(--text-2); font-size: 13.5px; }
-.empty { color: var(--text-3); padding: 12px 0; }
-@media (max-width: 560px) {
-  .row, .axis { grid-template-columns: 96px 1fr 52px; gap: 6px; }
-  .row .name { font-size: 12.5px; }
-  section { padding: 16px 12px; }
+table.hm { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 4px; }
+.hm th { font-size: 12px; font-weight: 600; color: var(--t3); padding: 4px 6px; text-align: center; }
+.hm th.l { text-align: left; }
+.hm td.e { font-size: 13.5px; color: var(--t1); white-space: nowrap; padding: 4px 6px; }
+.hm td.e .sub { display: block; font-size: 11px; color: var(--t4); }
+.hm td.c { position: relative; text-align: center; border-radius: 8px; padding: 6px 4px; cursor: default; }
+.hm td.c .w { font: 700 15px var(--mono); color: #fff; }
+.hm td.c .m { display: block; font: 500 11px var(--mono); }
+.hm td.c.cur { box-shadow: inset 0 0 0 1px rgba(56,189,248,.5); }
+.hm td.c.top { box-shadow: inset 0 0 0 2px var(--amber); }
+.hm td.c.thin .w { color: var(--t3); }
+.hm td.c.na { background: rgba(15,23,42,.4); color: var(--t4); }
+.hm tr.pred td.e { color: var(--t3); }
+
+/* events table */
+details > summary { cursor: pointer; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary .sh { cursor: pointer; }
+details[open] .caret { transform: rotate(90deg); }
+.caret { display: inline-block; transition: transform .15s; color: var(--t3); margin-right: 6px; }
+table.ev { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }
+.ev th { position: sticky; top: 0; background: #0f172aee; color: var(--t3); font-weight: 600; font-size: 12px; padding: 8px; text-align: right; white-space: nowrap; }
+.ev td { padding: 7px 8px; border-top: 1px solid var(--line2); text-align: right; white-space: nowrap; }
+.ev th.l, .ev td.l { text-align: left; }
+.evwrap { max-height: 480px; overflow: auto; border-radius: 10px; border: 1px solid var(--line2); }
+select { font: inherit; font-size: 13px; color: var(--t1); background: #0f172a; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); line-height: 1.8; }
+
+.tip { position: fixed; z-index: 20; pointer-events: none; display: none; background: #0f172af2; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: var(--t2); box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: 260px; }
+.tip b { color: #fff; }
+
+@media (max-width: 960px) { .plan { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .tiles { grid-template-columns: 1fr; }
+  h1 { font-size: 22px; }
+  .sh, .sb { padding-left: 12px; padding-right: 12px; }
 }
-.row.top .fill { background: var(--top); }
-.row .name .tag { font-size: 10.5px; padding: 0 5px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>處置股回測</h1>
-  <p class="sub">自用策略：處置新制（5 個營業日、約每 2 分鐘撮合）上路後，各種買點的勝率與報酬。</p>
-  <p class="meta" id="meta">載入中…</p>
-
-  <section>
-    <h2>明天可以買</h2>
-    <p class="small" style="margin:-6px 0 10px">資料在收盤後更新，這裡只列明天來得及執行的買點。<span class="tag go">黃底</span>＝該處置次數在目前持有天數下回測最佳的買點。</p>
-    <div class="scroll"><table id="live"></table></div>
-  </section>
-
-  <section>
-    <div class="controls">
-      <div><span class="lab">持有</span><span class="seg" id="segHold"></span></div>
+  <header class="top">
+    <div>
+      <h1>處置股回測<small>自用策略 · 處置新制（5 日、2 分鐘撮合）</small></h1>
+      <div class="meta" id="meta"></div>
     </div>
-    <h2>目前最佳買點</h2>
-    <div class="tiles" id="tiles"></div>
-  </section>
+    <div class="holdbox">持有天數 <span class="seg" id="segHold"></span></div>
+  </header>
 
-  <section>
-    <h2>各買點勝率</h2>
-    <div class="controls">
-      <div><span class="lab">分組</span><span class="seg" id="segGroup"></span></div>
+  <section style="--accent: var(--amber)">
+    <div class="sh">
+      <div><h2 id="planTitle">明天作戰清單</h2><p>依回測勝率排序；★＝該處置次數回測最佳買點。資料收盤後更新，這裡只列明天來得及執行的。</p></div>
+      <div class="legend">
+        <span><i class="g gA">A</i>勝率 ≥60%</span><span><i class="g gB">B</i>55–60%</span><span><i class="g gC">C</i>50–55%</span><span><i class="g gD">D</i>&lt;50% 避開</span>
+      </div>
     </div>
-    <div class="axis"><div></div><div><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div></div></div>
-    <div class="chart" id="chart"></div>
-    <p class="small">黃色＝最佳；淡色＝樣本少於最低門檻，或「需預判」（盤後才看得到、當天來不及做）。虛線＝50%。滑過長條看平均、中位數、最大回檔。</p>
-    <div class="scroll" style="margin-top:12px"><table id="stats"></table></div>
+    <div class="sb"><div class="plan" id="plan"></div></div>
   </section>
 
-  <section>
-    <h2>逐筆事件</h2>
-    <div class="controls">
-      <div><span class="lab">買點</span><select id="selEntry"></select></div>
-      <span class="small">分組依上方選擇；報酬已扣成本</span>
+  <section style="--accent: var(--sky)">
+    <div class="sh"><div><h2>目前最佳買點</h2><p id="bestSub"></p></div></div>
+    <div class="sb"><div class="tiles" id="tiles"></div></div>
+  </section>
+
+  <section style="--accent: #818cf8">
+    <div class="sh">
+      <div><h2>策略總覽：買點 × 持有天數</h2><p>格子＝扣成本後勝率（下方小字＝報酬中位數）；顏色越亮勝率越高，金框＝該欄最佳；灰字＝樣本不足。滑過看細節。</p></div>
+      <div class="tabs" id="tabs"></div>
     </div>
-    <div class="scroll"><table id="events"></table></div>
+    <div class="sb scroll"><table class="hm" id="hm"></table></div>
   </section>
 
-  <section>
+  <section style="--accent: #64748b">
+    <details id="evDetails">
+      <summary><div class="sh"><div><h2><span class="caret">▶</span>逐筆事件</h2><p>每件處置用指定買點的報酬（已扣成本），分組跟著上方策略總覽。</p></div></div></summary>
+      <div class="sb">
+        <div style="margin-bottom:10px;font-size:13px;color:var(--t3)">買點 <select id="selEntry"></select></div>
+        <div class="evwrap"><table class="ev" id="events"></table></div>
+      </div>
+    </details>
+  </section>
+
+  <section style="--accent: #64748b">
     <details>
-      <summary>回測方法與限制</summary>
-      <ul class="notes" id="notes"></ul>
+      <summary><div class="sh"><div><h2><span class="caret">▶</span>回測方法與限制</h2></div></div></summary>
+      <div class="sb"><ul class="notes" id="notes"></ul></div>
     </details>
   </section>
 </main>
@@ -154,111 +192,192 @@ ul.notes { margin: 8px 0 0; padding-left: 20px; color: var(--text-2); font-size:
 <script src="data.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
+const D = window.DISP_BT;
+const S = { hold: 5, group: 'k1', entry: 'B', showD: false };
+try { const h = +localStorage.getItem('dbt.hold'); if ([3, 5, 10, 20].includes(h)) S.hold = h; } catch (e) {}
 const pct = (x, d = 0) => (x == null ? '—' : (x * 100).toFixed(d) + '%');
 const sgn = (x, d = 1) => (x == null ? '—' : (x > 0 ? '+' : '') + (x * 100).toFixed(d) + '%');
 const cls = (x) => (x == null ? '' : x > 0 ? 'up' : x < 0 ? 'down' : '');
 const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '—');
-const state = { group: 'all', hold: 5, entry: 'B' };
-const D = window.DISP_BT;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const E = D ? Object.fromEntries(D.entries.map((e) => [e.key, e])) : {};
 const nameOf = (k) => (E[k] || {}).name || k;
-const inGroup = (e, g) => ({ all: true, k1: e.k === 1, k2: e.k === 2, hb: e.bias20 != null && e.bias20 > 0.25,
-  lb: e.bias20 != null && e.bias20 <= 0.25, '市': e.mkt === '市', '櫃': e.mkt === '櫃' })[g];
-const statusTxt = (e) => (e.status === 'pre' ? '已公告，明天開始' : e.status && e.status[0] === 'd' ? `處置第 ${e.status.slice(1)} 天` : e.status === 'post' ? '已出關' : '—');
+const grade = (w, n) => (w == null || n < D.minN ? 'C' : w >= 0.6 ? 'A' : w >= 0.55 ? 'B' : w >= 0.5 ? 'C' : 'D');
+const stat = (g, k, H = S.hold) => (D.stats[g] && D.stats[g][k] && D.stats[g][k][H]) || null;
+const gk = (k) => (k === 1 ? 'k1' : 'k2');
+const best = (g, H = S.hold) => ((D.best[H] || {})[g] || {}).entry;
+const OPEN = new Set(['B', 'X0', 'F', 'M5', 'M10', 'M20']);
+const mk = (m) => `<span class="chip mk ${m === '櫃' ? 'o' : ''}">${m === '市' ? '上市' : '上櫃'}</span>`;
+const kc = (k) => `<span class="chip ${k === 2 ? 'k2' : ''}">${k === 1 ? '第一次' : '第二次'}</span>`;
+const px = (v) => (v == null ? '—' : v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2));
+const statusTxt = (e) => (e.status === 'pre' ? '已公告，明天開始' : e.status && e.status[0] === 'd' ? `處置第 ${e.status.slice(1)} 天` : e.status === 'post' ? '已出關' : '');
 
-function seg(el, items, key, on) {
+function seg(el, items, cur, on) {
   el.innerHTML = '';
   for (const [k, label] of items) {
     const b = document.createElement('button');
-    b.textContent = label; b.setAttribute('aria-pressed', String(state[key] === k));
-    b.onclick = () => { state[key] = k; on(); };
-    el.appendChild(b);
+    b.textContent = label; b.setAttribute('aria-pressed', String(cur === k));
+    b.onclick = () => on(k); el.appendChild(b);
   }
 }
-const best = () => D.best[state.hold] || {};
 
 function renderMeta() {
   const done = D.events.filter((e) => Object.keys(e.r).length);
-  $('#meta').textContent = `新制起算 ${D.ruleStart} · 資料日 ${D.asOf} · 共 ${done.length} 件處置（上市 ${done.filter((e) => e.mkt === '市').length}、上櫃 ${done.filter((e) => e.mkt === '櫃').length}）· 報酬已扣 ${(D.cost * 100).toFixed(1)}% 成本 · 產生於 ${D.generatedAt}`;
+  const nx = D.predict && D.predict.next;
+  $('#meta').innerHTML = `<span class="pill"><i class="dot"></i>資料日 <b class="num">${D.asOf}</b></span>`
+    + (nx ? `<span class="pill">下個交易日 <b class="num">${nx}</b></span>` : '')
+    + `<span class="pill">樣本 <b class="num">${done.length}</b> 件（上市 ${done.filter((e) => e.mkt === '市').length}／上櫃 ${done.filter((e) => e.mkt === '櫃').length}）</span>`
+    + `<span class="pill">已扣成本 <b class="num">${(D.cost * 100).toFixed(1)}%</b></span>`
+    + `<span class="pill muted">更新 ${esc(D.generatedAt)}</span>`;
 }
 
-function renderLive() {
-  const B = best();
-  const rows = D.events.filter((e) => e.next && e.next.length).sort((a, b) => b.start.localeCompare(a.start));
-  const hit = (e) => e.next.includes((B[e.k === 1 ? 'k1' : 'k2'] || {}).entry);
-  rows.sort((a, b) => hit(b) - hit(a));
-  if (!rows.length) { $('#live').innerHTML = '<tr><td class="empty">明天沒有可執行的買點</td></tr>'; return; }
-  let h = '<tr><th class="l">股票</th><th class="l">明天可買</th><th class="l">今天狀態</th><th class="l">次數</th><th>收盤</th><th>處置前乖離月線</th><th class="l">處置期間</th><th class="l">市場</th></tr>';
-  for (const e of rows) {
-    const bk = (B[e.k === 1 ? 'k1' : 'k2'] || {}).entry;
-    h += `<tr class="${hit(e) ? 'best' : ''}"><td class="l">${e.code} ${e.name}</td>
-      <td class="l">${e.next.map((k) => `<span class="tag ${k === bk ? 'go' : ''}">${nameOf(k)}</span>`).join('')}</td>
-      <td class="l">${statusTxt(e)}</td><td class="l">${e.k === 1 ? '第一次' : '第二次'}</td>
-      <td>${e.close ?? '—'}</td><td class="${cls(e.bias20)}">${sgn(e.bias20)}</td>
-      <td class="l">${md(e.start)} ~ ${md(e.end)}</td><td class="l">${e.mkt === '市' ? '上市' : '上櫃'}</td></tr>`;
+/* ---------------- 明天作戰清單 ---------------- */
+function actionCard(o) {
+  const st = o.st;
+  const g = grade(st && st.win, st ? st.n : 0);
+  const isBest = o.entry === best(gk(o.k));
+  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' ? 'weak' : ''}">
+    <span class="code">${o.code}</span><span class="nm">${esc(o.name)}</span><span class="g g${g}">${g}</span>
+    <div class="tags">${mk(o.mkt)}${kc(o.k)}${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
+    <div class="what">${isBest ? '<span class="star">★ </span>' : ''}<b>${esc(o.label)}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
+    <div class="stat">${st ? `<span>勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>回檔 <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}</span>` : '<span class="muted">樣本不足</span>'}</div>
+  </div>`;
+}
+
+function predCard(c) {
+  const H = S.hold;
+  const st = stat(gk(c.k), 'A');
+  const g = grade(st && st.win, st ? st.n : 0);
+  const tr = c.tr || {};
+  const hk = c.cat + (c.k === 2 ? '_in' : '');
+  const h = (D.predict.hit || {})[hk];
+  let cond;
+  if (c.cat === 'always') {
+    const parts = [];
+    if (tr.upPx != null) parts.push(`收 &lt; <b class="num">${px(tr.upPx)}</b>（${tr.upPct > 0 ? '+' : ''}${tr.upPct}%）`);
+    if (tr.dnPx != null) parts.push(`收 &gt; <b class="num">${px(tr.dnPx)}</b>（${tr.dnPct}%）`);
+    cond = `平盤附近就達標：${parts.length ? parts.join(' 且 ') : '漲跌停都會達標'}`;
+  } else if (c.cat === 'price') {
+    const parts = [];
+    if (tr.upPx != null) parts.push(`收 ≥ <b class="num">${px(tr.upPx)}</b>（+${tr.upPct}%）`);
+    if (tr.dnPx != null) parts.push(`收 ≤ <b class="num">${px(tr.dnPx)}</b>（${tr.dnPct}%）`);
+    cond = parts.length ? `要${parts.join(' 或 ')}才達標` : '漲跌停都不會達標';
+  } else {
+    cond = `${esc(c.rule)}：明天被列任一款注意（漲跌幅、量、週轉率…）就處置`;
   }
-  $('#live').innerHTML = h;
+  const hitTxt = h && h.n ? `過去命中 <b class="num" style="color:var(--t1)">${h.hit}/${h.n}</b>` : '命中率累積中';
+  const hr = h && h.n ? h.hit / h.n : null;
+  const hg = hr == null ? 'C' : hr >= 0.6 ? 'A' : hr >= 0.4 ? 'B' : 'D';
+  return `<div class="tcard ${g === 'D' ? 'weak' : ''}">
+    <span class="code">${c.code}</span><span class="nm">${esc(c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
+    <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
+    <div class="what">${cond}</div>
+    <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・抱${H}天勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
+  </div>`;
 }
 
+function renderPlan() {
+  const nx = D.predict && D.predict.next;
+  $('#planTitle').textContent = nx ? `明天（${md(nx)}）作戰清單` : '明天作戰清單';
+  const acts = [];
+  for (const e of D.events) for (const k of e.next || []) {
+    const st = stat(gk(e.k), k);
+    acts.push({ code: e.code, name: e.name, mkt: e.mkt, k: e.k, entry: k, label: nameOf(k), st, status: statusTxt(e),
+      extra: e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '' });
+  }
+  const score = (a) => (a.st && a.st.n >= D.minN ? a.st.win : -1) + (a.entry === best(gk(a.k)) ? 0.001 : 0);
+  acts.sort((a, b) => score(b) - score(a));
+  const open = acts.filter((a) => OPEN.has(a.entry)), close = acts.filter((a) => !OPEN.has(a.entry));
+
+  const P = D.predict || {};
+  let predHtml;
+  if (!P.ok) predHtml = `<div class="empty">讀不到戰情室的處置股雷達資料，暫時無法預判。</div>`;
+  else {
+    const cs = P.cands.slice().sort((a, b) => ({ always: 0, price: 1, other: 2 })[a.cat] - ({ always: 0, price: 1, other: 2 })[b.cat] || a.k - b.k);
+    predHtml = `<div class="warn">處置在收盤後才公告，這欄是用處置股雷達的「明天再 1 次即處置」名單預判。13:20 左右確認價格落在達標範圍，再用尾盤買進；命中率樣本還少，部位放小。</div>`
+      + (cs.length ? cs.map(predCard).join('') : '<div class="empty">明天沒有「再 1 次即處置」的股票</div>');
+  }
+  const col = (title, sub, body) => `<div class="col"><div class="colh"><b>${title}</b><span>${sub}</span></div>${body}</div>`;
+  const isD = (a) => grade(a.st && a.st.win, a.st ? a.st.n : 0) === 'D';
+  const list = (arr) => {
+    if (!arr.length) return '<div class="empty">沒有</div>';
+    const keep = S.showD ? arr : arr.filter((a) => !isD(a));
+    const hid = arr.length - keep.length;
+    return (keep.length ? keep.map(actionCard).join('') : '<div class="empty">只有 D 級（勝率 &lt;50%）的買點</div>')
+      + (hid ? `<button class="more" data-more>＋ 另有 ${hid} 筆 D 級（勝率 &lt;50%，建議避開）</button>` : '')
+      + (S.showD && arr.some(isD) ? '<button class="more" data-less>收起 D 級</button>' : '');
+  };
+  $('#plan').innerHTML =
+    col('09:00 開盤買', `${open.length} 筆`, list(open)) +
+    col('13:30 收盤買', `${close.length} 筆`, list(close)) +
+    col('盤中預判・尾盤買', '公告日收盤', predHtml);
+  $('#plan').querySelectorAll('[data-more]').forEach((b) => (b.onclick = () => { S.showD = true; renderPlan(); }));
+  $('#plan').querySelectorAll('[data-less]').forEach((b) => (b.onclick = () => { S.showD = false; renderPlan(); }));
+}
+
+/* ---------------- 最佳買點 ---------------- */
 function renderTiles() {
-  seg($('#segHold'), D.holds.map((h) => [h, `${h} 天`]), 'hold', renderAll);
-  const B = best(); const t = $('#tiles'); t.innerHTML = '';
-  for (const g of ['k1', 'k2', 'all']) {
-    const b = B[g]; const name = D.groups.find((x) => x.key === g).name;
-    const div = document.createElement('div'); div.className = 'tile';
-    div.innerHTML = b ? `<div class="lab">${name}・抱 ${state.hold} 天</div><div class="big">${nameOf(b.entry)}</div>
-      <div class="note">勝率 ${pct(b.win)} · 中位數 <span class="${cls(b.median)}">${sgn(b.median)}</span> · 平均回檔 <span class="down">${sgn(b.dd)}</span> · n=${b.n}</div>`
-      : `<div class="lab">${name}</div><div class="note">樣本還不夠（至少 ${D.minN} 件）</div>`;
-    t.appendChild(div);
-  }
+  $('#bestSub').textContent = `抱 ${S.hold} 天、樣本 ≥ ${D.minN} 件、只算實際做得到的買點`;
+  const B = D.best[S.hold] || {};
+  const t = [['k1', '第一次處置', 'var(--amber)'], ['k2', '第二次處置', 'var(--rose)'], ['all', '全部', 'var(--sky)']];
+  $('#tiles').innerHTML = t.map(([g, label, c]) => {
+    const b = B[g];
+    return `<div class="tile" style="--c:${c}"><div class="l">${label}・抱 ${S.hold} 天最佳</div>`
+      + (b ? `<div class="v">${nameOf(b.entry)}</div><div class="s">勝率 <b class="num" style="color:#fff">${pct(b.win)}</b> · 中位數 <span class="num ${cls(b.median)}">${sgn(b.median)}</span> · 回檔 <span class="num down">${sgn(b.dd)}</span> · n=${b.n}</div>`
+        : `<div class="s" style="margin-top:6px">樣本還不夠</div>`) + `</div>`;
+  }).join('');
 }
 
-function renderChart() {
-  seg($('#segGroup'), D.groups.map((g) => [g.key, g.name]), 'group', renderAll);
-  const S = D.stats[state.group] || {}; const H = state.hold;
-  const bk = (best()[state.group] || {}).entry;
-  const c = $('#chart'); c.innerHTML = '';
+/* ---------------- 熱力圖 ---------------- */
+function cellBg(w) {
+  // 50% 為中性；越高越亮的金藍、越低越暗
+  const d = Math.max(-0.2, Math.min(0.2, w - 0.5)) / 0.2;
+  if (d >= 0) return `rgba(${Math.round(56 + 195 * d)}, ${Math.round(189 + 2 * d)}, ${Math.round(248 - 212 * d)}, ${0.12 + 0.38 * d})`;
+  return `rgba(100,116,139,${0.10 + 0.10 * -d})`;
+}
+function renderHeat() {
+  seg($('#tabs'), D.groups.map((g) => [g.key, g.name]), S.group, (k) => { S.group = k; renderHeat(); renderEvents(); });
+  const g = S.group;
+  const tops = {};
+  for (const H of D.holds) tops[H] = (D.best[H] || {})[g] && D.best[H][g].entry;
+  let h = `<tr><th class="l">買點</th>${D.holds.map((H) => `<th>抱 ${H} 天</th>`).join('')}</tr>`;
   for (const e of D.entries) {
-    const v = S[e.key] && S[e.key][H];
-    const row = document.createElement('div');
-    row.className = 'row' + (e.key === bk ? ' top' : !v || v.n < D.minN || !e.real ? ' weak' : '');
-    row.innerHTML = `<div class="name">${e.name}${e.real ? '' : ' <span class="tag">需預判</span>'}</div><div class="track">${v ? `<div class="fill" style="width:${v.win * 100}%"></div>` : ''}</div><div class="val">${v ? pct(v.win) : '—'}</div>`;
-    if (v) {
-      row.onmousemove = (ev) => showTip(ev, `<b>${e.name}・抱 ${H} 天</b><div><span class="k">勝率</span> ${pct(v.win)}（n=${v.n}）</div>
-        <div><span class="k">平均</span> <span class="${cls(v.mean)}">${sgn(v.mean)}</span>　<span class="k">中位數</span> <span class="${cls(v.median)}">${sgn(v.median)}</span></div>
-        <div><span class="k">平均最大回檔</span> <span class="down">${sgn(v.dd)}</span></div><div class="k" style="margin-top:4px;font-size:12px">${e.desc}</div>`);
-      row.onmouseleave = hideTip;
+    h += `<tr class="${e.real ? '' : 'pred'}"><td class="e">${e.name}<span class="sub">${OPEN.has(e.key) ? '開盤買' : '收盤買'}${e.real ? '' : '・需預判'}</span></td>`;
+    for (const H of D.holds) {
+      const s = stat(g, e.key, H);
+      if (!s) { h += `<td class="c na">—</td>`; continue; }
+      const thin = s.n < D.minN;
+      h += `<td class="c ${thin ? 'thin' : ''} ${tops[H] === e.key ? 'top' : ''} ${H === S.hold ? 'cur' : ''}" style="background:${thin ? 'rgba(15,23,42,.4)' : cellBg(s.win)}"
+        data-t="${esc(e.name)}・抱 ${H} 天|勝率 ${pct(s.win)}（n=${s.n}）|平均 ${sgn(s.mean)}・中位數 ${sgn(s.median)}|平均最大回檔 ${sgn(s.dd)}|${esc(e.desc)}">
+        <span class="w">${pct(s.win)}</span><span class="m ${cls(s.median)}">${sgn(s.median)}</span></td>`;
     }
-    c.appendChild(row);
+    h += '</tr>';
   }
-  const track = c.querySelector('.track');
-  const ref = document.createElement('div'); ref.className = 'ref';
-  ref.style.left = (track.offsetLeft + track.offsetWidth / 2) + 'px'; c.appendChild(ref);
-
-  let h = '<tr><th class="l">買點</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>中位數</th><th>平均最大回檔</th></tr>';
-  for (const e of D.entries) {
-    const v = S[e.key] && S[e.key][H]; if (!v) continue;
-    h += `<tr class="${e.key === bk ? 'best' : ''}"><td class="l">${e.name}${e.real ? '' : ' <span class="tag">需預判</span>'}</td><td>${v.n}</td><td>${pct(v.win)}</td>
-      <td class="${cls(v.mean)}">${sgn(v.mean)}</td><td class="${cls(v.median)}">${sgn(v.median)}</td><td class="down">${sgn(v.dd)}</td></tr>`;
-  }
-  $('#stats').innerHTML = h;
+  $('#hm').innerHTML = h;
+  $('#hm').querySelectorAll('td.c[data-t]').forEach((td) => {
+    td.onmousemove = (ev) => { const p = td.dataset.t.split('|'); showTip(ev, `<b>${p[0]}</b><br>${p.slice(1, 4).join('<br>')}<div style="margin-top:4px;color:var(--t4)">${p[4]}</div>`); };
+    td.onmouseleave = hideTip;
+  });
 }
 
+/* ---------------- 逐筆事件 ---------------- */
+const inGroup = (e, g) => ({ all: true, k1: e.k === 1, k2: e.k === 2, hb: e.bias20 != null && e.bias20 > 0.25,
+  lb: e.bias20 != null && e.bias20 <= 0.25, '市': e.mkt === '市', '櫃': e.mkt === '櫃' })[g];
 function renderEvents() {
   const sel = $('#selEntry');
   if (!sel.options.length) {
     for (const e of D.entries) sel.add(new Option(e.name, e.key));
-    sel.value = state.entry; sel.onchange = () => { state.entry = sel.value; renderEvents(); };
+    sel.value = S.entry; sel.onchange = () => { S.entry = sel.value; renderEvents(); };
   }
-  const k = state.entry;
-  const evs = D.events.filter((e) => Object.keys(e.r).length && inGroup(e, state.group)).sort((a, b) => b.start.localeCompare(a.start));
+  const k = S.entry;
+  const evs = D.events.filter((e) => Object.keys(e.r).length && inGroup(e, S.group)).sort((a, b) => b.start.localeCompare(a.start));
   let h = `<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th>乖離月線</th><th class="l">買進日</th>${D.holds.map((x) => `<th>${x} 天</th>`).join('')}</tr>`;
   for (const e of evs) {
     const r = e.r[k];
-    h += `<tr><td class="l">${e.code} ${e.name}</td><td class="l">${e.mkt === '市' ? '上市' : '上櫃'}</td><td class="l">${e.k === 1 ? '第一次' : '第二次'}</td>
-      <td class="l">${md(e.start)} ~ ${md(e.end)}</td><td class="${cls(e.bias20)}">${sgn(e.bias20)}</td>
-      <td class="l">${r ? md(r.d) : '<span class="muted">未觸發</span>'}</td>
-      ${D.holds.map((x) => { const v = r && r[x]; const net = v ? v[0] - D.cost : null; return `<td class="${cls(net)}">${v ? sgn(net) : '<span class="muted">—</span>'}</td>`; }).join('')}</tr>`;
+    h += `<tr><td class="l"><span class="num" style="color:var(--sky)">${e.code}</span> ${esc(e.name)}</td><td class="l">${mk(e.mkt)}</td><td class="l">${kc(e.k)}</td>
+      <td class="l num">${md(e.start)}~${md(e.end)}</td><td class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</td>
+      <td class="l num">${r ? md(r.d) : '<span class="muted">未觸發</span>'}</td>
+      ${D.holds.map((x) => { const v = r && r[x]; const net = v ? v[0] - D.cost : null; return `<td class="num ${cls(net)}">${v ? sgn(net) : '<span class="muted">—</span>'}</td>`; }).join('')}</tr>`;
   }
   $('#events').innerHTML = evs.length ? h : '<tr><td class="empty">沒有事件</td></tr>';
 }
@@ -268,23 +387,29 @@ function showTip(ev, html) { const t = $('#tip'); t.innerHTML = html; t.style.di
 function hideTip() { $('#tip').style.display = 'none'; }
 
 function renderNotes() {
+  const P = D.predict || {};
   $('#notes').innerHTML = [
-    `只納入 ${D.ruleStart} 之後開始的處置（新制），普通股（4 碼），排除權證、ETF 與「人工管制撮合」類。`,
-    `報酬一律扣 ${(D.cost * 100).toFixed(1)}% 交易成本（手續費買賣各 0.1425% + 證交稅 0.3%）。「勝率」＝扣成本後報酬 > 0 的比例。最佳買點至少要 ${D.minN} 件樣本。`,
-    '收盤買：當天收盤價買，第 N 個交易日收盤賣。開盤買：當天開盤價買，含當天共 N 個交易日後收盤賣。',
-    '資料在收盤後才更新，所以「收黑、跌破均線」這類要看收盤才確認的訊號，一律用隔天開盤價回測。',
-    '「公告日收盤」：處置公告在收盤後才出來，只能用處置股雷達的觸發價在盤中預判，所以標「需預判」、不列入最佳。',
+    `只納入 ${D.ruleStart} 之後開始的處置（新制），普通股（4 碼），排除權證、ETF 與「人工管制撮合」。`,
+    `報酬一律扣 ${(D.cost * 100).toFixed(1)}% 交易成本。勝率＝扣成本後報酬 &gt; 0 的比例；最佳買點至少要 ${D.minN} 件樣本。`,
+    '收盤買：當天收盤價買、第 N 個交易日收盤賣。開盤買：當天開盤價買、含當天共 N 個交易日後收盤賣。',
+    '資料在收盤後才更新，所以「收黑、跌破均線」這類訊號一律用隔天開盤價回測。',
+    `「盤中預判・尾盤買」：用台股盤後戰情室「處置股雷達」的「明天再 1 次即處置」名單與觸發價預判；命中率＝過去 ${P.days || 0} 個交易日的快照中，名單上的股票隔天真的被公告處置的比例。估價只算第一款（6 日累計漲跌幅），沒算與大盤差幅等條件，會有誤差。`,
     '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
-    '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞，不要只看絕對報酬。歷史回測不代表未來。',
+    '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞。歷史回測不代表未來。',
   ].map((s) => `<li>${s}</li>`).join('');
 }
 
-function renderAll() { renderTiles(); renderLive(); renderChart(); renderEvents(); }
+function renderHold() {
+  seg($('#segHold'), D.holds.map((h) => [h, `${h}天`]), S.hold, (k) => {
+    S.hold = k; try { localStorage.setItem('dbt.hold', k); } catch (e) {}
+    renderHold(); renderPlan(); renderTiles(); renderHeat();
+  });
+}
+
 if (!D) {
-  $('#meta').textContent = '還沒有回測資料：到 GitHub 的 Actions 頁手動執行一次「處置股回測每日更新」，跑完後重新整理這一頁。';
+  $('#meta').innerHTML = '<span class="pill">還沒有回測資料：到 GitHub 的 Actions 頁手動執行一次「處置股回測每日更新」，跑完後重新整理。</span>';
 } else {
-  renderMeta(); renderAll(); renderNotes();
-  addEventListener('resize', renderChart);
+  renderMeta(); renderHold(); renderPlan(); renderTiles(); renderHeat(); renderEvents(); renderNotes();
 }
 </script>
 </body>
