@@ -189,10 +189,9 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
 </main>
 <div class="tip" id="tip"></div>
 
-<script src="data.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const D = window.DISP_BT;
+let D = null;
 const S = { hold: 5, group: 'k1', entry: 'B', showD: false };
 try { const h = +localStorage.getItem('dbt.hold'); if ([3, 5, 10, 20].includes(h)) S.hold = h; } catch (e) {}
 const pct = (x, d = 0) => (x == null ? '—' : (x * 100).toFixed(d) + '%');
@@ -200,7 +199,7 @@ const sgn = (x, d = 1) => (x == null ? '—' : (x > 0 ? '+' : '') + (x * 100).to
 const cls = (x) => (x == null ? '' : x > 0 ? 'up' : x < 0 ? 'down' : '');
 const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '—');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const E = D ? Object.fromEntries(D.entries.map((e) => [e.key, e])) : {};
+let E = {};
 const nameOf = (k) => (E[k] || {}).name || k;
 const grade = (w, n) => (w == null || n < D.minN ? 'C' : w >= 0.6 ? 'A' : w >= 0.55 ? 'B' : w >= 0.5 ? 'C' : 'D');
 const stat = (g, k, H = S.hold) => (D.stats[g] && D.stats[g][k] && D.stats[g][k][H]) || null;
@@ -406,11 +405,22 @@ function renderHold() {
   });
 }
 
-if (!D) {
-  $('#meta').innerHTML = '<span class="pill">還沒有回測資料：到 GitHub 的 Actions 頁手動執行一次「處置股回測每日更新」，跑完後重新整理。</span>';
-} else {
+function boot() {
+  D = window.DISP_BT;
+  if (!D) {
+    $('#meta').innerHTML = '<span class="pill">還沒有回測資料：到 GitHub 的 Actions 頁手動執行一次「處置股回測每日更新」，跑完後重新整理。</span>';
+    return;
+  }
+  E = Object.fromEntries(D.entries.map((e) => [e.key, e]));
   renderMeta(); renderHold(); renderPlan(); renderTiles(); renderHeat(); renderEvents(); renderNotes();
 }
+// 每次都抓最新的 data.js（避免瀏覽器快取舊資料）
+(() => {
+  const sc = document.createElement('script');
+  sc.src = 'data.js?t=' + Date.now();
+  sc.onload = boot; sc.onerror = boot;
+  document.body.appendChild(sc);
+})();
 </script>
 </body>
 </html>
