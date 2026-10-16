@@ -44,7 +44,13 @@ const ENTRIES = [ // [key, 名稱, 說明, 盤後看得到訊號後還來得及�
   ["M5", "破5日線→隔日開盤", "處置開始後首次收盤 < 5MA（觀察到出關後 10 天），隔天開盤買", true],
   ["M10", "破10日線→隔日開盤", "處置開始後首次收盤 < 10MA，隔天開盤買", true],
   ["M20", "破月線→隔日開盤", "處置開始後首次收盤 < 20MA，隔天開盤買", true],
+  ["L5", "掛低接−5%", "處置期間掛限價買單在『公告日收盤×0.95』，盤中碰到就成交（開盤就更低則以開盤價成交）", true],
+  ["L7", "掛低接−7%", "處置期間掛限價買單在『公告日收盤×0.93』，盤中碰到就成交", true],
+  ["L10", "掛低接−10%", "處置期間掛限價買單在『公告日收盤×0.90』，盤中碰到就成交", true],
+  ["S5", "D5收盤放空", "處置第 5 天收盤融券／借券賣出，抱 N 天回補（報酬已換算成做空的賺賠；回檔＝持有期間最大反向漲幅）", true],
 ];
+const KIND = { B: "open", X0: "open", F: "open", M5: "open", M10: "open", M20: "open", L5: "limit", L7: "limit", L10: "limit", S5: "short" }; // 其餘為收盤買
+const LIMITS = { L5: 0.05, L7: 0.07, L10: 0.10 };
 const GROUPS = [
   ["all", "全部", () => true],
   ["k1", "第一次處置", (e) => e.k === 1],
@@ -53,6 +59,11 @@ const GROUPS = [
   ["lb", "乖離月線≤25%", (e) => e.bias20 != null && e.bias20 <= 0.25],
   ["市", "上市", (e) => e.mkt === "市"],
   ["櫃", "上櫃", (e) => e.mkt === "櫃"],
+  ["k1p", "第一次・股價≥100", (e) => e.k === 1 && e.px0 >= 100],
+  ["k1pg", "第一次・股價≥100＋開盤≤3%", (e) => e.k === 1 && e.px0 >= 100 && e.gap != null && e.gap <= 0.03],
+  ["k1l", "第一次・股價<100", (e) => e.k === 1 && e.px0 < 100],
+  ["k2p", "第二次・股價≥100", (e) => e.k === 2 && e.px0 >= 100],
+  ["k2l", "第二次・股價<100", (e) => e.k === 2 && e.px0 < 100],
 ];
 
 /* ---------------- 小工具 ---------------- */
@@ -182,19 +193,27 @@ function analyse(ev, bars) {
   const firstDown = () => { for (let i = s; i <= e; i++) if (C[i] < C[i - 1]) return i; return null; };
   const nx = (i) => (i == null ? null : i + 1); // 收盤才確認的訊號 → 隔天開盤買
   const ent = { A: [s - 1, 0], B: [s, 1] };
+  const P0 = C[s - 1];
+  for (const [k, x] of Object.entries(LIMITS)) { // 掛低接：盤中碰到就成交
+    const P = P0 * (1 - x);
+    for (let i = s; i <= e; i++) if (bars[i].l <= P) { ent[k] = [i, 1, Math.min(P, bars[i].o)]; break; }
+  }
+  if (s + 4 <= e) ent.S5 = [s + 4, 0, null, -1];
   for (let k = 1; k <= 5; k++) if (s + k - 1 <= e) ent[`D${k}`] = [s + k - 1, 0];
   Object.assign(ent, { X0: [e + 1, 1], X1: [e + 1, 0], X3: [e + 3, 0], F: [nx(firstDown()), 1], M5: [nx(firstBelow(5)), 1], M10: [nx(firstBelow(10)), 1], M20: [nx(firstBelow(20)), 1] });
   const r = {};
-  for (const [k, [idx, open]] of Object.entries(ent)) {
+  for (const [k, [idx, open, pxo, dir = 1]] of Object.entries(ent)) {
     if (idx == null || idx < 0 || idx >= bars.length) continue;
-    const px = open ? bars[idx].o : bars[idx].c;
+    const px = pxo || (open ? bars[idx].o : bars[idx].c);
     if (!px) continue;
     const o = { d: D[idx] };
     for (const H of HOLDS) {
       const x = open ? idx + H - 1 : idx + H;
       if (x >= bars.length) continue;
-      const low = Math.min(...bars.slice(open ? idx : idx + 1, x + 1).map((b) => b.l));
-      o[H] = [r4(C[x] / px - 1), r4(low / px - 1)];
+      const seg = bars.slice(open ? idx : idx + 1, x + 1);
+      o[H] = dir > 0
+        ? [r4(C[x] / px - 1), r4(Math.min(...seg.map((b) => b.l)) / px - 1)]
+        : [r4(1 - C[x] / px), r4(1 - Math.max(...seg.map((b) => b.h)) / px)];
     }
     r[k] = o;
   }
@@ -206,12 +225,21 @@ function analyse(ev, bars) {
   else if (i < eEnd) { if (i - s + 2 <= 5) next.push(`D${i - s + 2}`); }             // 處置中，明天第 k+1 天收盤
   else if (i === eEnd) next.push("X0", "X1");                  // 今天處置最後一天，明天出關
   if (i === e + 2) next.push("X3");
+  if (i === s + 3 && eEnd >= s + 4) next.push("S5");                   // 明天處置第 5 天收盤空
+  if (i >= s - 1 && i < eEnd) {                                         // 處置期間（含明天開始）還可以掛低接
+    for (const [k, x] of Object.entries(LIMITS)) {
+      let filled = false;
+      for (let j = s; j <= i; j++) if (bars[j].l <= P0 * (1 - x)) filled = true;
+      if (!filled) next.push(k);
+    }
+  }
   if (firstDown() === i) next.push("F");
   if (s <= i && i <= e + 10) for (const n of [5, 10, 20]) if (firstBelow(n) === i) next.push(`M${n}`);
   const m20 = sma(C, 20, s - 1);
   return {
     code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end,
     bias20: m20 ? r4(C[s - 1] / m20 - 1) : null,
+    px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
     status: i < s ? "pre" : i <= eEnd ? `d${i - s + 1}` : i <= e + 10 ? "post" : "done",
     close: C[i], next, r,
   };
@@ -246,7 +274,7 @@ function bestOf(stats, H) {
   for (const [g] of GROUPS) {
     let b = null;
     for (const [k, v] of Object.entries(stats[g])) {
-      if (!ENTRIES.find((x) => x[0] === k)?.[3]) continue; // 盤後才看得到、來不及做的不列入
+      if (!ENTRIES.find((x) => x[0] === k)?.[3] || KIND[k] === "short") continue; // 來不及做的、做空的不列入最佳買點
       const s = v[H];
       if (!s || s.n < MIN_N) continue;
       if (!b || s.win > b.win || (s.win === b.win && s.median > b.median)) b = { entry: k, ...s };
@@ -356,7 +384,7 @@ async function main() {
     const a = bars.length ? analyse(ev, bars) : null;
     if (a) events.push(a);
     else if (bars.length && ev.start > bars[bars.length - 1].d) {
-      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, bias20: null, status: "pre", close: bars[bars.length - 1].c, next: ["B", "D1"], r: {} });
+      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, bias20: null, status: "pre", close: bars[bars.length - 1].c, px0: bars[bars.length - 1].c, gap: null, next: ["B", "D1", "L5", "L7", "L10"], r: {} });
     }
   }
   const stats = aggregate(events);
@@ -370,7 +398,7 @@ async function main() {
     asOf: lastDate,
     ruleStart: RULE_START,
     cost: COST, holds: HOLDS, minN: MIN_N,
-    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real })),
+    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: LIMITS[key] })),
     groups: GROUPS.map(([key, name]) => ({ key, name })),
     stats,
     best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),

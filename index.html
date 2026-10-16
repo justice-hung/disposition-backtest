@@ -76,6 +76,10 @@ section::before { content: ""; position: absolute; left: 0; right: 0; top: 0; he
 .tcard .what b { color: var(--t1); }
 .tcard .stat { grid-column: 1 / 4; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--t3); }
 .chip { display: inline-block; padding: 0 6px; border-radius: 5px; font-size: 11px; line-height: 18px; background: rgba(51,65,85,.6); color: var(--t2); }
+.chip.hi { background: rgba(251,191,36,.14); color: #fcd34d; }
+.chip.lo { background: rgba(100,116,139,.18); color: var(--t4); }
+.chip.sh { background: rgba(52,211,153,.18); color: #6ee7b7; font-weight: 700; }
+.tcard.short { border-left: 3px solid rgba(52,211,153,.6); }
 .chip.k2 { background: rgba(251,113,133,.15); color: #fda4af; }
 .chip.mk { background: rgba(59,130,246,.18); color: #93c5fd; }
 .chip.mk.o { background: rgba(168,85,247,.18); color: #d8b4fe; }
@@ -192,7 +196,7 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
 <script>
 const $ = (s) => document.querySelector(s);
 let D = null;
-const S = { hold: 5, group: 'k1', entry: 'B', showD: false };
+const S = { hold: 5, group: 'k1p', entry: 'B', showD: false };
 try { const h = +localStorage.getItem('dbt.hold'); if ([3, 5, 10, 20].includes(h)) S.hold = h; } catch (e) {}
 const pct = (x, d = 0) => (x == null ? '—' : (x * 100).toFixed(d) + '%');
 const sgn = (x, d = 1) => (x == null ? '—' : (x > 0 ? '+' : '') + (x * 100).toFixed(d) + '%');
@@ -201,11 +205,10 @@ const md = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '—');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 let E = {};
 const nameOf = (k) => (E[k] || {}).name || k;
-const grade = (w, n) => (w == null || n < D.minN ? 'C' : w >= 0.6 ? 'A' : w >= 0.55 ? 'B' : w >= 0.5 ? 'C' : 'D');
+const grade = (w, n) => (w == null || n < 8 ? 'C' : w >= 0.6 ? 'A' : w >= 0.55 ? 'B' : w >= 0.5 ? 'C' : 'D'); // 8 件以上就分級，未滿最低樣本會標「樣本少」
 const stat = (g, k, H = S.hold) => (D.stats[g] && D.stats[g][k] && D.stats[g][k][H]) || null;
 const gk = (k) => (k === 1 ? 'k1' : 'k2');
 const best = (g, H = S.hold) => ((D.best[H] || {})[g] || {}).entry;
-const OPEN = new Set(['B', 'X0', 'F', 'M5', 'M10', 'M20']);
 const mk = (m) => `<span class="chip mk ${m === '櫃' ? 'o' : ''}">${m === '市' ? '上市' : '上櫃'}</span>`;
 const kc = (k) => `<span class="chip ${k === 2 ? 'k2' : ''}">${k === 1 ? '第一次' : '第二次'}</span>`;
 const px = (v) => (v == null ? '—' : v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2));
@@ -231,21 +234,29 @@ function renderMeta() {
 }
 
 /* ---------------- 明天作戰清單 ---------------- */
+// 依股價分組：回測發現股價 ≥100 元的處置股勝率明顯較高
+const grpOf = (k, p0) => (k === 1 ? (p0 >= 100 ? 'k1p' : 'k1l') : (p0 >= 100 ? 'k2p' : 'k2l'));
+const grpName = (g) => ({ k1p: '第一次・≥100元', k1l: '第一次・<100元', k2p: '第二次・≥100元', k2l: '第二次・<100元' })[g] || g;
+const kindOf = (k) => (E[k] || {}).kind || 'close';
+
 function actionCard(o) {
   const st = o.st;
   const g = grade(st && st.win, st ? st.n : 0);
-  const isBest = o.entry === best(gk(o.k));
-  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' ? 'weak' : ''}">
+  const isBest = o.entry === best(o.grp);
+  const isShort = kindOf(o.entry) === 'short';
+  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' ? 'weak' : ''} ${isShort ? 'short' : ''}">
     <span class="code">${o.code}</span><span class="nm">${esc(o.name)}</span><span class="g g${g}">${g}</span>
-    <div class="tags">${mk(o.mkt)}${kc(o.k)}${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
-    <div class="what">${isBest ? '<span class="star">★ </span>' : ''}<b>${esc(o.label)}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
-    <div class="stat">${st ? `<span>勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>回檔 <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}</span>` : '<span class="muted">樣本不足</span>'}</div>
+    <div class="tags">${mk(o.mkt)}${kc(o.k)}<span class="chip ${o.p0 >= 100 ? 'hi' : 'lo'}">${o.p0 >= 100 ? '≥100元' : '<100元'}</span>${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
+    <div class="what">${isBest ? '<span class="star">★ </span>' : ''}${isShort ? '<span class="chip sh">空</span> ' : ''}<b>${o.label}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
+    <div class="stat">${st ? `<span>${isShort ? '做空' : ''}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>${isShort ? '反向' : '回檔'} <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}${st.n < D.minN ? '・<span style="color:#fcd34d">樣本少</span>' : ''}${o.statNote ? '・' + o.statNote : ''}</span>` : '<span class="muted">樣本不足</span>'}</div>
   </div>`;
 }
 
 function predCard(c) {
   const H = S.hold;
-  const st = stat(gk(c.k), 'A');
+  const grp = grpOf(c.k, c.close);
+  let st = stat(grp, 'A');
+  if (!st || st.n < 8) st = stat(c.k === 1 ? 'k1' : 'k2', 'A');
   const g = grade(st && st.win, st ? st.n : 0);
   const tr = c.tr || {};
   const hk = c.cat + (c.k === 2 ? '_in' : '');
@@ -269,56 +280,85 @@ function predCard(c) {
   const hg = hr == null ? 'C' : hr >= 0.6 ? 'A' : hr >= 0.4 ? 'B' : 'D';
   return `<div class="tcard ${g === 'D' ? 'weak' : ''}">
     <span class="code">${c.code}</span><span class="nm">${esc(c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
-    <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
-    <div class="what">${cond}</div>
+    <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip ${c.close >= 100 ? 'hi' : 'lo'}">${c.close >= 100 ? '≥100元' : '<100元'}</span><span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
+    <div class="what"><span class="chip">預判</span> 公告日收盤買 · ${cond}</div>
     <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・抱${H}天勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
   </div>`;
+}
+
+function buildActions() {
+  const acts = [];
+  for (const e of D.events) {
+    const nx = e.next || [];
+    if (!nx.length) continue;
+    const grp = grpOf(e.k, e.px0);
+    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e) };
+    const bias = e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '';
+    // 掛低接：同一檔只列該組回測最好的一檔價位
+    const lims = nx.filter((k) => kindOf(k) === 'limit');
+    let bestL = null;
+    for (const k of lims) { const st = stat(grp, k); const w = st && st.n >= 8 ? st.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
+    for (const k of nx) {
+      const kind = kindOf(k);
+      if (kind === 'limit' && k !== (bestL && bestL.k)) continue;
+      let st = stat(grp, k), label = esc(nameOf(k)), extra = bias, statNote = grpName(grp);
+      if (kind === 'limit') {
+        const P = e.px0 * (1 - E[k].limit);
+        label = `掛 <span class="num">${px(P)}</span> 限價買（公告價−${Math.round(E[k].limit * 100)}%）`;
+        extra = '處置期間有效，碰到才成交';
+      }
+      if (!st || st.n < 8) { st = stat(e.k === 1 ? 'k1' : 'k2', k); statNote = e.k === 1 ? '第一次全部' : '第二次全部'; } // 分組樣本太少就退回大分組
+      if (k === 'B' && grp === 'k1p') {
+        st = stat('k1pg', 'B') || st; statNote = '≥100元＋開盤≤3%';
+        extra = `開盤 ≤ <b class="num">${px(e.px0 * 1.03)}</b> 才買，跳空超過 3% 不追`;
+      }
+      if (kind === 'short') extra = '融券／借券；要有券、漲幅風險無上限';
+      acts.push({ ...base, entry: k, label, st, extra, statNote });
+    }
+  }
+  const score = (a) => (a.st && a.st.n >= D.minN ? a.st.win : a.st && a.st.n >= 8 ? a.st.win - 0.05 : -1) + (a.entry === best(a.grp) ? 0.001 : 0);
+  return acts.sort((a, b) => score(b) - score(a));
 }
 
 function renderPlan() {
   const nx = D.predict && D.predict.next;
   $('#planTitle').textContent = nx ? `明天（${md(nx)}）作戰清單` : '明天作戰清單';
-  const acts = [];
-  for (const e of D.events) for (const k of e.next || []) {
-    const st = stat(gk(e.k), k);
-    acts.push({ code: e.code, name: e.name, mkt: e.mkt, k: e.k, entry: k, label: nameOf(k), st, status: statusTxt(e),
-      extra: e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '' });
-  }
-  const score = (a) => (a.st && a.st.n >= D.minN ? a.st.win : -1) + (a.entry === best(gk(a.k)) ? 0.001 : 0);
-  acts.sort((a, b) => score(b) - score(a));
-  const open = acts.filter((a) => OPEN.has(a.entry)), close = acts.filter((a) => !OPEN.has(a.entry));
+  const acts = buildActions();
+  const open = acts.filter((a) => kindOf(a.entry) === 'open');
+  const lim = acts.filter((a) => kindOf(a.entry) === 'limit');
+  const close = acts.filter((a) => ['close', 'short'].includes(kindOf(a.entry)));
 
   const P = D.predict || {};
   let predHtml;
-  if (!P.ok) predHtml = `<div class="empty">讀不到戰情室的處置股雷達資料，暫時無法預判。</div>`;
+  if (!P.ok) predHtml = `<div class="empty">讀不到戰情室的處置股雷達資料，暫時無法預判公告日。</div>`;
   else {
     const cs = P.cands.slice().sort((a, b) => ({ always: 0, price: 1, other: 2 })[a.cat] - ({ always: 0, price: 1, other: 2 })[b.cat] || a.k - b.k);
-    predHtml = `<div class="warn">處置在收盤後才公告，這欄是用處置股雷達的「明天再 1 次即處置」名單預判。13:20 左右確認價格落在達標範圍，再用尾盤買進；命中率樣本還少，部位放小。</div>`
+    predHtml = `<div class="warn">公告日預判：處置在收盤後才公告，用處置股雷達「明天再 1 次即處置」名單。13:20 左右確認價格落在達標範圍，再用尾盤買；命中率樣本還少，部位放小。</div>`
       + (cs.length ? cs.map(predCard).join('') : '<div class="empty">明天沒有「再 1 次即處置」的股票</div>');
   }
   const col = (title, sub, body) => `<div class="col"><div class="colh"><b>${title}</b><span>${sub}</span></div>${body}</div>`;
   const isD = (a) => grade(a.st && a.st.win, a.st ? a.st.n : 0) === 'D';
-  const list = (arr) => {
-    if (!arr.length) return '<div class="empty">沒有</div>';
+  const list = (arr, emptyTxt = '沒有') => {
+    if (!arr.length) return `<div class="empty">${emptyTxt}</div>`;
     const keep = S.showD ? arr : arr.filter((a) => !isD(a));
     const hid = arr.length - keep.length;
-    return (keep.length ? keep.map(actionCard).join('') : '<div class="empty">只有 D 級（勝率 &lt;50%）的買點</div>')
+    return (keep.length ? keep.map(actionCard).join('') : '<div class="empty">只有 D 級（勝率 &lt;50%）的選項</div>')
       + (hid ? `<button class="more" data-more>＋ 另有 ${hid} 筆 D 級（勝率 &lt;50%，建議避開）</button>` : '')
       + (S.showD && arr.some(isD) ? '<button class="more" data-less>收起 D 級</button>' : '');
   };
   $('#plan').innerHTML =
     col('09:00 開盤買', `${open.length} 筆`, list(open)) +
-    col('13:30 收盤買', `${close.length} 筆`, list(close)) +
-    col('盤中預判・尾盤買', '公告日收盤', predHtml);
+    col('盤中掛單・預判', `${lim.length + (P.ok ? P.cands.length : 0)} 筆`, list(lim, '沒有可掛的低接單') + predHtml) +
+    col('13:30 收盤買・空', `${close.length} 筆`, list(close));
   $('#plan').querySelectorAll('[data-more]').forEach((b) => (b.onclick = () => { S.showD = true; renderPlan(); }));
   $('#plan').querySelectorAll('[data-less]').forEach((b) => (b.onclick = () => { S.showD = false; renderPlan(); }));
 }
 
 /* ---------------- 最佳買點 ---------------- */
 function renderTiles() {
-  $('#bestSub').textContent = `抱 ${S.hold} 天、樣本 ≥ ${D.minN} 件、只算實際做得到的買點`;
+  $('#bestSub').textContent = `抱 ${S.hold} 天、樣本 ≥ ${D.minN} 件、只算實際做得到的買點（不含做空）`;
   const B = D.best[S.hold] || {};
-  const t = [['k1', '第一次處置', 'var(--amber)'], ['k2', '第二次處置', 'var(--rose)'], ['all', '全部', 'var(--sky)']];
+  const t = [['k1p', '第一次處置・股價≥100', 'var(--amber)'], ['k1l', '第一次處置・股價<100', '#a78bfa'], ['k2', '第二次處置', 'var(--rose)']];
   $('#tiles').innerHTML = t.map(([g, label, c]) => {
     const b = B[g];
     return `<div class="tile" style="--c:${c}"><div class="l">${label}・抱 ${S.hold} 天最佳</div>`
@@ -341,7 +381,7 @@ function renderHeat() {
   for (const H of D.holds) tops[H] = (D.best[H] || {})[g] && D.best[H][g].entry;
   let h = `<tr><th class="l">買點</th>${D.holds.map((H) => `<th>抱 ${H} 天</th>`).join('')}</tr>`;
   for (const e of D.entries) {
-    h += `<tr class="${e.real ? '' : 'pred'}"><td class="e">${e.name}<span class="sub">${OPEN.has(e.key) ? '開盤買' : '收盤買'}${e.real ? '' : '・需預判'}</span></td>`;
+    h += `<tr class="${e.real ? '' : 'pred'}"><td class="e">${e.name}<span class="sub">${({ open: '開盤買', close: '收盤買', limit: '盤中掛單', short: '收盤放空' })[e.kind] || '收盤買'}${e.real ? '' : '・需預判'}</span></td>`;
     for (const H of D.holds) {
       const s = stat(g, e.key, H);
       if (!s) { h += `<td class="c na">—</td>`; continue; }
@@ -393,6 +433,10 @@ function renderNotes() {
     '收盤買：當天收盤價買、第 N 個交易日收盤賣。開盤買：當天開盤價買、含當天共 N 個交易日後收盤賣。',
     '資料在收盤後才更新，所以「收黑、跌破均線」這類訊號一律用隔天開盤價回測。',
     `「盤中預判・尾盤買」：用台股盤後戰情室「處置股雷達」的「明天再 1 次即處置」名單與觸發價預判；命中率＝過去 ${P.days || 0} 個交易日的快照中，名單上的股票隔天真的被公告處置的比例。估價只算第一款（6 日累計漲跌幅），沒算與大盤差幅等條件，會有誤差。`,
+    '股價分組：用公告日收盤價分「≥100 元」和「<100 元」。回測發現 ≥100 元的處置股勝率明顯較高；第一次處置第 1 天開盤買再加「開盤漲幅 ≤ 3%」（跳空大漲不追），勝率最好。卡片上的統計會依股價自動套用對應分組。',
+    '掛低接：處置期間在「公告日收盤 × (1−5%/7%/10%)」掛限價買單，盤中碰到就成交（開盤就更低則以開盤價成交），同一檔只列回測最好的一個價位。追高（突破 +3%~+15% 再買）回測勝率都不到 55%，所以沒有列。',
+    'D5收盤放空：處置第 5 天收盤融券／借券賣出，抱 N 天回補；勝率、報酬已換成做空的賺賠，「反向」＝持有期間最大反向漲幅。要有券可借、漲幅風險沒有上限，只適合小部位；不列入最佳買點。',
+    '加停損反而變差：處置期間撮合慢、價格跳動大，固定 7% 停損或移動停損都讓勝率下降，所以回測都用固定持有天數。',
     '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
     '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞。歷史回測不代表未來。',
   ].map((s) => `<li>${s}</li>`).join('');
