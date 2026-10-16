@@ -1,8 +1,10 @@
+# 處置股回測：每個交易日盤後自動抓證交所／櫃買處置公告與日 K、重算回測，
+# 把 data.js 和 cache/ 推回 repo，GitHub Pages 會自動重新發佈網頁。
 name: 處置股回測每日更新
 
 on:
   schedule:
-    - cron: "40 10 * * 1-5"   # 台北時間週一到週五 18:40（處置公告與日 K 都已出來）
+    - cron: "40 10 * * 1-5"   # 台灣時間週一到週五 18:40（排程尖峰可能延遲 10~30 分鐘）
   workflow_dispatch:           # 可在 Actions 頁手動執行
 
 permissions:
@@ -15,20 +17,19 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-      - run: pip install -r requirements-disposition.txt
+          node-version: 22
       - name: 回測
-        run: python scripts/disposition_backtest.py
-      - name: 提交更新
+        run: node backtest.mjs
+      - name: 推回 repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add docs/disposition/data.json data/disposition/cache
+          git add data.js cache
           if git diff --cached --quiet; then echo "沒有變更"; exit 0; fi
-          git commit -m "處置股回測更新 $(TZ=Asia/Taipei date +%F)"
-          git push
+          git commit -m "回測更新 $(TZ=Asia/Taipei date +%F' '%H:%M)"
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 10; done
