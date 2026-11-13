@@ -80,6 +80,9 @@ section::before { content: ""; position: absolute; left: 0; right: 0; top: 0; he
 .chip.lo { background: rgba(100,116,139,.18); color: var(--t4); }
 .chip.sh { background: rgba(52,211,153,.18); color: #6ee7b7; font-weight: 700; }
 .tcard.short { border-left: 3px solid rgba(52,211,153,.6); }
+.chip.ok { background: rgba(52,211,153,.15); color: #6ee7b7; font-weight: 700; }
+.chip.no { background: rgba(100,116,139,.18); color: var(--t4); text-decoration: line-through; }
+.chip.slow { background: rgba(251,146,60,.18); color: #fdba74; font-weight: 700; }
 .chip.k2 { background: rgba(251,113,133,.15); color: #fda4af; }
 .chip.mk { background: rgba(59,130,246,.18); color: #93c5fd; }
 .chip.mk.o { background: rgba(168,85,247,.18); color: #d8b4fe; }
@@ -130,6 +133,24 @@ table.ev { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 
 select { font: inherit; font-size: 13px; color: var(--t1); background: #0f172a; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
 ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); line-height: 1.8; }
 
+.dchart { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; align-items: end; height: 220px; padding: 4px 0 0; border-bottom: 1px solid var(--line); position: relative; }
+.dcol { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; cursor: default; }
+.dcol .lab { position: absolute; bottom: -22px; font-size: 11.5px; color: var(--t3); white-space: nowrap; }
+.dcol .val { font: 600 11.5px var(--mono); margin-bottom: 3px; }
+.dcol .bar { width: 70%; max-width: 46px; border-radius: 4px 4px 0 0; }
+.dcol .stk { width: 70%; max-width: 46px; height: 100%; display: flex; flex-direction: column-reverse; border-radius: 4px; overflow: hidden; }
+.dzero { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--t4); pointer-events: none; }
+.dsep { box-shadow: inset 2px 0 0 rgba(148,163,184,.25); }
+.dcol .lab .sm { display: none; }
+.seg button { white-space: nowrap; }
+@media (max-width: 640px) {
+  .dchart { gap: 2px; }
+  .dcol .lab .lg { display: none; } .dcol .lab .sm { display: inline; }
+  .dcol .val { font-size: 9.5px; }
+  .dcol .bar, .dcol .stk { width: 85%; }
+  .seg button { padding: 6px 8px; font-size: 12px; }
+}
+.dchart + .legend { margin-top: 28px !important; }
 .tip { position: fixed; z-index: 20; pointer-events: none; display: none; background: #0f172af2; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: var(--t2); box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: 260px; }
 .tip b { color: #fff; }
 
@@ -164,6 +185,20 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
   <section style="--accent: var(--sky)">
     <div class="sh"><div><h2>目前最佳買點</h2><p id="bestSub"></p></div></div>
     <div class="sb"><div class="tiles" id="tiles"></div></div>
+  </section>
+
+  <section style="--accent: #f472b6">
+    <div class="sh">
+      <div><h2>處置統計：每天怎麼走</h2><p>處前 2 天到出關後 3 天，每一天的平均表現；振幅越小＝價格越收斂。滑過看細節。</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <span class="seg" id="dsMetric"></span><span class="seg" id="dsGroup"></span>
+      </div>
+    </div>
+    <div class="sb">
+      <div class="dchart" id="dsChart"></div>
+      <div class="legend" id="dsLegend" style="margin:8px 0 14px"></div>
+      <div class="evwrap" style="max-height:420px"><table class="ev" id="dsTable"></table></div>
+    </div>
   </section>
 
   <section style="--accent: #818cf8">
@@ -238,15 +273,19 @@ function renderMeta() {
 const grpOf = (k, p0) => (k === 1 ? (p0 >= 100 ? 'k1p' : 'k1l') : (p0 >= 100 ? 'k2p' : 'k2l'));
 const grpName = (g) => ({ k1p: '第一次・≥100元', k1l: '第一次・<100元', k2p: '第二次・≥100元', k2l: '第二次・<100元' })[g] || g;
 const kindOf = (k) => (E[k] || {}).kind || 'close';
+const mgOf = (code) => ((D.margin && D.margin.map) || {})[code];
+const shChip = (code) => { const m = mgOf(code); if (!m) return ''; return m[0] ? '<span class="chip ok" title="可融券放空">券</span>' : `<span class="chip no" title="${esc(m[1] || '')}">無券</span>`; };
+const minChip = (mn) => (mn && mn > 5 ? `<span class="chip slow" title="人工管制撮合，約每 ${mn} 分鐘撮合一次">${mn}分撮合</span>` : '');
 
 function actionCard(o) {
   const st = o.st;
   const g = grade(st && st.win, st ? st.n : 0);
   const isBest = o.entry === best(o.grp);
   const isShort = kindOf(o.entry) === 'short';
-  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' ? 'weak' : ''} ${isShort ? 'short' : ''}">
+  const noShort = isShort && mgOf(o.code) && !mgOf(o.code)[0];
+  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' || noShort ? 'weak' : ''} ${isShort ? 'short' : ''}">
     <span class="code">${o.code}</span><span class="nm">${esc(o.name)}</span><span class="g g${g}">${g}</span>
-    <div class="tags">${mk(o.mkt)}${kc(o.k)}<span class="chip ${o.p0 >= 100 ? 'hi' : 'lo'}">${o.p0 >= 100 ? '≥100元' : '<100元'}</span>${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
+    <div class="tags">${mk(o.mkt)}${kc(o.k)}<span class="chip ${o.p0 >= 100 ? 'hi' : 'lo'}">${o.p0 >= 100 ? '≥100元' : '<100元'}</span>${minChip(o.min)}${shChip(o.code)}${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
     <div class="what">${isBest ? '<span class="star">★ </span>' : ''}${isShort ? '<span class="chip sh">空</span> ' : ''}<b>${o.label}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
     <div class="stat">${st ? `<span>${isShort ? '做空' : ''}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>${isShort ? '反向' : '回檔'} <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}${st.n < D.minN ? '・<span style="color:#fcd34d">樣本少</span>' : ''}${o.statNote ? '・' + o.statNote : ''}</span>` : '<span class="muted">樣本不足</span>'}</div>
   </div>`;
@@ -280,7 +319,7 @@ function predCard(c) {
   const hg = hr == null ? 'C' : hr >= 0.6 ? 'A' : hr >= 0.4 ? 'B' : 'D';
   return `<div class="tcard ${g === 'D' ? 'weak' : ''}">
     <span class="code">${c.code}</span><span class="nm">${esc(c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
-    <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip ${c.close >= 100 ? 'hi' : 'lo'}">${c.close >= 100 ? '≥100元' : '<100元'}</span><span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
+    <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip ${c.close >= 100 ? 'hi' : 'lo'}">${c.close >= 100 ? '≥100元' : '<100元'}</span>${shChip(c.code)}<span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
     <div class="what"><span class="chip">預判</span> 公告日收盤買 · ${cond}</div>
     <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・抱${H}天勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
   </div>`;
@@ -292,7 +331,7 @@ function buildActions() {
     const nx = e.next || [];
     if (!nx.length) continue;
     const grp = grpOf(e.k, e.px0);
-    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e) };
+    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e), min: e.min };
     const bias = e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '';
     // 掛低接：同一檔只列該組回測最好的一檔價位
     const lims = nx.filter((k) => kindOf(k) === 'limit');
@@ -312,7 +351,11 @@ function buildActions() {
         st = stat('k1pg', 'B') || st; statNote = '≥100元＋開盤≤3%';
         extra = `開盤 ≤ <b class="num">${px(e.px0 * 1.03)}</b> 才買，跳空超過 3% 不追`;
       }
-      if (kind === 'short') extra = '融券／借券；要有券、漲幅風險無上限';
+      if (kind === 'short') {
+        const m = mgOf(e.code);
+        extra = !m ? '融券／借券；要有券、漲幅風險無上限' : m[0] ? '可融券；漲幅風險無上限，部位放小' : `<span style="color:#fca5a5">不可融券${m[1] && m[1] !== '非信用交易標的' ? `（${esc(m[1])}）` : ''}，只能借券或跳過</span>`;
+      }
+      if (e.min && e.min > 5) extra = (extra ? extra + ' · ' : '') + `<span style="color:#fdba74">約每 ${e.min} 分鐘撮合，掛單不一定成交</span>`;
       acts.push({ ...base, entry: k, label, st, extra, statNote });
     }
   }
@@ -399,6 +442,67 @@ function renderHeat() {
   });
 }
 
+/* ---------------- 處置統計（逐日） ---------------- */
+const DS_COLS = ['處前2', '處前1', '處置1', '處置2', '處置3', '處置4', '處置5', '出關1', '出關2', '出關3'];
+const DS_SHORT = ['前2', '前1', '處1', '處2', '處3', '處4', '處5', '出1', '出2', '出3'];
+const DS_METRICS = [['chg', '平均漲跌幅'], ['rb', '紅黑機率'], ['oc', '開收差幅'], ['rng', '振幅（收斂）']];
+const DS_GROUPS = [['all', '全樣本'], ['k1', '初犯'], ['k2', '累犯']];
+S.dsMetric = 'chg'; S.dsGroup = 'k2';
+const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+function renderDays() {
+  seg($('#dsMetric'), DS_METRICS, S.dsMetric, (k) => { S.dsMetric = k; renderDays(); });
+  seg($('#dsGroup'), DS_GROUPS, S.dsGroup, (k) => { S.dsGroup = k; renderDays(); });
+  const evs = D.events.filter((e) => e.days && (S.dsGroup === 'all' || e.k === (S.dsGroup === 'k1' ? 1 : 2)));
+  const m = S.dsMetric;
+  const cols = DS_COLS.map((name, i) => {
+    const v = evs.map((e) => e.days[i]).filter(Boolean);
+    return { name, n: v.length, chg: avg(v.map((x) => x[0])), oc: avg(v.map((x) => x[1])), rng: avg(v.map((x) => x[2])),
+      red: v.filter((x) => x[1] > 0).length / (v.length || 1), flat: v.filter((x) => x[1] === 0).length / (v.length || 1) };
+  });
+  let h = '';
+  if (m === 'rb') {
+    h = cols.map((c, i) => `<div class="dcol ${i === 2 || i === 7 ? 'dsep' : ''}" data-t="${c.name}|紅K ${pct(c.red)}・平 ${pct(c.flat)}・黑K ${pct(1 - c.red - c.flat)}|n=${c.n}">
+      <span class="val" style="color:${c.red >= 0.5 ? 'var(--up)' : 'var(--t3)'}">${pct(c.red)}</span>
+      <div class="stk" style="height:calc(100% - 20px)"><div style="height:${c.red * 100}%;background:#ef4444"></div><div style="height:${c.flat * 100}%;background:#e2e8f0"></div><div style="flex:1;background:#10b981"></div></div>
+      <span class="lab"><span class="lg">${c.name}</span><span class="sm">${DS_SHORT[i]}</span></span></div>`).join('') + `<div class="dzero" style="bottom:${(220 - 20) * 0.5 + 0}px"></div>`;
+    $('#dsLegend').innerHTML = '<span><i style="width:10px;height:10px;background:#ef4444;display:inline-block;border-radius:2px"></i>紅K（收&gt;開）</span><span><i style="width:10px;height:10px;background:#e2e8f0;display:inline-block;border-radius:2px"></i>平K</span><span><i style="width:10px;height:10px;background:#10b981;display:inline-block;border-radius:2px"></i>黑K</span><span class="muted">虛線＝50%</span>';
+  } else {
+    const vals = cols.map((c) => c[m]);
+    const pos = m === 'rng';
+    const mx = Math.max(0.005, ...vals.map((v) => Math.abs(v || 0)));
+    const zero = pos ? 0 : 0.5; // 0 軸位置（比例）
+    h = cols.map((c, i) => {
+      const v = c[m]; if (v == null) return `<div class="dcol"><span class="lab"><span class="lg">${c.name}</span><span class="sm">${DS_SHORT[i]}</span></span></div>`;
+      const hh = Math.abs(v) / mx * (pos ? 0.85 : 0.42) * 100;
+      const color = pos ? '#a78bfa' : v >= 0 ? '#ef4444' : '#10b981';
+      const bar = pos || v >= 0
+        ? `<span class="val ${pos ? '' : cls(v)}" style="margin-bottom:3px">${pos ? pct(v, 1) : sgn(v, 2)}</span><div class="bar" style="height:${hh}%;background:${color}"></div><div style="height:${zero * 100}%"></div>`
+        : `<div style="height:${(1 - zero) * 100}%"></div><div class="bar" style="height:${hh}%;background:${color};border-radius:0 0 4px 4px"></div><span class="val down" style="margin-top:3px">${sgn(v, 2)}</span><div style="flex:1"></div>`;
+      return `<div class="dcol ${i === 2 || i === 7 ? 'dsep' : ''}" style="justify-content:${pos || v >= 0 ? 'flex-end' : 'flex-start'}" data-t="${c.name}|${DS_METRICS.find((x) => x[0] === m)[1]} ${pos ? pct(v, 2) : sgn(v, 2)}|n=${c.n}">${bar}<span class="lab"><span class="lg">${c.name}</span><span class="sm">${DS_SHORT[i]}</span></span></div>`;
+    }).join('') + (pos ? '' : `<div class="dzero" style="bottom:50%"></div>`);
+    $('#dsLegend').innerHTML = m === 'rng' ? '<span class="muted">振幅＝(最高−最低)÷前一日收盤；處置期間越來越小＝收斂</span>'
+      : m === 'oc' ? '<span class="muted">開收差幅＝收盤÷開盤−1（當天開盤買、收盤賣的平均報酬，未扣成本）</span>'
+      : '<span class="muted">漲跌幅＝收盤÷前一日收盤−1；紅＝漲、綠＝跌</span>';
+  }
+  $('#dsChart').innerHTML = h;
+  $('#dsChart').querySelectorAll('[data-t]').forEach((el) => { el.onmousemove = (ev) => { const p = el.dataset.t.split('|'); showTip(ev, `<b>${p[0]}</b><br>${p[1]}<br><span class="muted">${p[2]}</span>`); }; el.onmouseleave = hideTip; });
+
+  // 個股逐日表
+  const idx = m === 'oc' ? 1 : m === 'rng' ? 2 : 0;
+  const list = evs.slice().sort((a, b) => b.start.localeCompare(a.start));
+  let t = `<tr><th class="l">股票</th><th class="l">處置期間</th>${DS_COLS.map((c) => `<th>${c}</th>`).join('')}</tr>`;
+  for (const e of list) {
+    t += `<tr><td class="l"><span class="num" style="color:var(--sky)">${e.code}</span> ${esc(e.name)} ${kc(e.k)}</td><td class="l num">${md(e.start)}~${md(e.end)}</td>`
+      + e.days.map((x) => {
+        if (!x) return '<td class="muted">—</td>';
+        if (m === 'rb') return `<td class="num ${x[1] > 0 ? 'up' : x[1] < 0 ? 'down' : ''}">${x[1] > 0 ? '紅' : x[1] < 0 ? '黑' : '平'}</td>`;
+        const v = x[idx];
+        return m === 'rng' ? `<td class="num" style="color:#c4b5fd">${(v * 100).toFixed(1)}</td>` : `<td class="num ${cls(v)}">${(v * 100).toFixed(1)}</td>`;
+      }).join('') + '</tr>';
+  }
+  $('#dsTable').innerHTML = list.length ? t : '<tr><td class="empty">沒有資料（下次自動更新後就會有）</td></tr>';
+}
+
 /* ---------------- 逐筆事件 ---------------- */
 const inGroup = (e, g) => ({ all: true, k1: e.k === 1, k2: e.k === 2, hb: e.bias20 != null && e.bias20 > 0.25,
   lb: e.bias20 != null && e.bias20 <= 0.25, '市': e.mkt === '市', '櫃': e.mkt === '櫃' })[g];
@@ -436,6 +540,8 @@ function renderNotes() {
     '股價分組：用公告日收盤價分「≥100 元」和「<100 元」。回測發現 ≥100 元的處置股勝率明顯較高；第一次處置第 1 天開盤買再加「開盤漲幅 ≤ 3%」（跳空大漲不追），勝率最好。卡片上的統計會依股價自動套用對應分組。',
     '掛低接：處置期間在「公告日收盤 × (1−5%/7%/10%)」掛限價買單，盤中碰到就成交（開盤就更低則以開盤價成交），同一檔只列回測最好的一個價位。追高（突破 +3%~+15% 再買）回測勝率都不到 55%，所以沒有列。',
     'D5收盤放空：處置第 5 天收盤融券／借券賣出，抱 N 天回補；勝率、報酬已換成做空的賺賠，「反向」＝持有期間最大反向漲幅。要有券可借、漲幅風險沒有上限，只適合小部位；不列入最佳買點。',
+    '「券」＝可融券放空（證交所／櫃買信用交易資料，取最近一個交易日；暫停融券或非信用交易標的會標「無券」）。做空卡片遇到無券會變淡，只能改用借券或跳過。',
+    '「N分撮合」＝處置改成人工管制、約每 N 分鐘撮合一次（多半是全額交割或變更交易方法的股票）。新制後大部分處置是 2 分鐘，10 分鐘以上的很少；策略總覽可切「2分鐘撮合／慢撮合≥10分」分組比較，慢撮合樣本很少，參考就好。',
     '加停損反而變差：處置期間撮合慢、價格跳動大，固定 7% 停損或移動停損都讓勝率下降，所以回測都用固定持有天數。',
     '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
     '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞。歷史回測不代表未來。',
@@ -456,7 +562,7 @@ function boot() {
     return;
   }
   E = Object.fromEntries(D.entries.map((e) => [e.key, e]));
-  renderMeta(); renderHold(); renderPlan(); renderTiles(); renderHeat(); renderEvents(); renderNotes();
+  renderMeta(); renderHold(); renderPlan(); renderTiles(); renderDays(); renderHeat(); renderEvents(); renderNotes();
 }
 // 每次都抓最新的 data.js（避免瀏覽器快取舊資料）
 (() => {

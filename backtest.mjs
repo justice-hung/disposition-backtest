@@ -64,6 +64,8 @@ const GROUPS = [
   ["k1l", "第一次・股價<100", (e) => e.k === 1 && e.px0 < 100],
   ["k2p", "第二次・股價≥100", (e) => e.k === 2 && e.px0 >= 100],
   ["k2l", "第二次・股價<100", (e) => e.k === 2 && e.px0 < 100],
+  ["fast", "2分鐘撮合", (e) => e.min != null && e.min <= 5],
+  ["slow", "慢撮合≥10分", (e) => e.min != null && e.min >= 10],
 ];
 
 /* ---------------- 小工具 ---------------- */
@@ -118,7 +120,7 @@ async function fetchDisposals(from, to) {
     for (const r of j.data || []) {
       const rng = String(r[6]).split(/[～~]/);
       if (rng.length !== 2) continue;
-      out.push({ mkt: "市", code: String(r[2]).trim(), name: String(r[3]).trim(), pub: rocToIso(r[1]), start: rocToIso(rng[0]), end: rocToIso(rng[1]), kind: String(r[7]).trim() });
+      out.push({ mkt: "市", code: String(r[2]).trim(), name: String(r[3]).trim(), pub: rocToIso(r[1]), start: rocToIso(rng[0]), end: rocToIso(rng[1]), kind: String(r[7]).trim(), min: minOf(r[8]) });
     }
   } catch (e) { console.log(`❌ 上市處置公告：${e.message}`); }
   try {
@@ -126,10 +128,21 @@ async function fetchDisposals(from, to) {
     for (const r of (j.tables?.[0]?.data) || []) {
       const rng = String(r[5]).split(/[～~]/);
       if (rng.length !== 2) continue;
-      out.push({ mkt: "櫃", code: String(r[2]).trim(), name: String(r[3]).replace(/\(.*$/, "").trim(), pub: rocToIso(r[1]), start: rocToIso(rng[0]), end: rocToIso(rng[1]), kind: String(r[7]).trim() });
+      out.push({ mkt: "櫃", code: String(r[2]).trim(), name: String(r[3]).replace(/\(.*$/, "").trim(), pub: rocToIso(r[1]), start: rocToIso(rng[0]), end: rocToIso(rng[1]), kind: String(r[7]).trim(), min: minOf(r[8]) });
     }
   } catch (e) { console.log(`❌ 上櫃處置公告：${e.message}`); }
   return out;
+}
+// 撮合間隔（分鐘）：證交所寫國字「約每二十五分鐘」、櫃買寫數字「約每25分鐘」
+function minOf(text) {
+  const m = String(text || "").match(/約每\s*([0-9一二三四五六七八九十]+)\s*分鐘/);
+  if (!m) return null;
+  if (/^\d+$/.test(m[1])) return +m[1];
+  const d = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const t = m[1];
+  if (t === "十") return 10;
+  if (t.includes("十")) { const [a, b] = t.split("十"); return (a ? d[a] : 1) * 10 + (b ? d[b] : 0); }
+  return d[t] ?? null;
 }
 const kindOf = (k) => (/人工/.test(k) ? null : /第一次/.test(k) ? 1 : /第二次|再次/.test(k) ? 2 : null);
 
@@ -237,11 +250,17 @@ function analyse(ev, bars) {
   if (s <= i && i <= e + 10) for (const n of [5, 10, 20]) if (firstBelow(n) === i) next.push(`M${n}`);
   const m20 = sma(C, 20, s - 1);
   return {
-    code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end,
+    code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null,
     bias20: m20 ? r4(C[s - 1] / m20 - 1) : null,
     px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
     status: i < s ? "pre" : i <= eEnd ? `d${i - s + 1}` : i <= e + 10 ? "post" : "done",
     close: C[i], next, r,
+    // 逐日：[漲跌幅, 開收差, 振幅]，順序＝處前2、處前1、處置1~5、出關1~3（沒有的為 null）
+    days: [s - 2, s - 1, s, s + 1, s + 2, s + 3, s + 4, e + 1, e + 2, e + 3].map((j, n) => {
+      if (j < 1 || j >= bars.length || (n >= 2 && n <= 6 && j > e)) return null;
+      const b = bars[j], p = bars[j - 1].c;
+      return [r4(b.c / p - 1), r4(b.c / b.o - 1), r4((b.h - b.l) / p)];
+    }),
   };
 }
 
@@ -340,6 +359,47 @@ async function predictions(events, tradeDays) {
   return { ok: true, asOf: X.asOf, next: X.next, cands, hit, days };
 }
 
+/* ---------------- 融券資格（可不可以放空） ---------------- */
+// 證交所 MI_MARGN「融資融券彙總」：融券「次一營業日限額」> 0 才能融券；註記含 X＝停止融券
+// 櫃買 margin/balance：「券限額」> 0 才能融券
+async function marginInfo(codes, tradeDays) {
+  const want = new Set(codes);
+  const res = { map: {}, twse: null, tpex: null };
+  const ymd = (d) => d.replace(/-/g, "");
+  for (const d of tradeDays.slice(-5).reverse()) {
+    if (res.twse) break;
+    try {
+      const j = await getJSON(`https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=${ymd(d)}&selectType=ALL&response=json`);
+      const t = (j.tables || []).find((x) => /融資融券彙總/.test(x.title || "") && (x.data || []).length);
+      if (!t) continue;
+      res.twse = d;
+      for (const r of t.data) {
+        const c = String(r[0]).trim(); if (!want.has(c)) continue;
+        const lim = num(r[13]), note = String(r[15] || "").trim();
+        res.map[c] = [lim > 0 && !/X/i.test(note) ? 1 : 0, note];
+      }
+    } catch { /* 試前一天 */ }
+    await sleep(1500);
+  }
+  for (const d of tradeDays.slice(-5).reverse()) {
+    if (res.tpex) break;
+    try {
+      const j = await getJSON(`https://www.tpex.org.tw/www/zh-tw/margin/balance?date=${d.replace(/-/g, "/")}&response=json`);
+      const t = (j.tables || []).find((x) => (x.data || []).length);
+      if (!t) continue;
+      res.tpex = d;
+      for (const r of t.data) {
+        const c = String(r[0]).trim(); if (!want.has(c)) continue;
+        const lim = num(r[17]), note = String(r[19] || "").trim();
+        res.map[c] = [lim > 0 ? 1 : 0, note];
+      }
+    } catch { /* 試前一天 */ }
+    await sleep(1200);
+  }
+  for (const c of want) if (!res.map[c] && (res.twse || res.tpex)) res.map[c] = [0, "非信用交易標的"];
+  return res;
+}
+
 /* ---------------- 主程式 ---------------- */
 async function main() {
   const t0 = Date.now();
@@ -384,13 +444,18 @@ async function main() {
     const a = bars.length ? analyse(ev, bars) : null;
     if (a) events.push(a);
     else if (bars.length && ev.start > bars[bars.length - 1].d) {
-      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, bias20: null, status: "pre", close: bars[bars.length - 1].c, px0: bars[bars.length - 1].c, gap: null, next: ["B", "D1", "L5", "L7", "L10"], r: {} });
+      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, bias20: null, status: "pre", close: bars[bars.length - 1].c, px0: bars[bars.length - 1].c, gap: null, next: ["B", "D1", "L5", "L7", "L10"], r: {} });
     }
   }
   const stats = aggregate(events);
   const tradeDays = [...new Set([...barsOf.values()].flatMap((b) => b.map((x) => x.d)))].sort().filter((d) => d >= RULE_START);
   let predict = { ok: false, note: "" };
   try { predict = await predictions([...events, ...upcoming], tradeDays); } catch (e) { predict = { ok: false, note: e.message }; }
+  const liveCodes = [...new Set([...events, ...upcoming].filter((e) => (e.next || []).length || e.status !== "done").map((e) => e.code)
+    .concat(predict.ok ? predict.cands.map((c) => c.code) : []))];
+  let margin = { map: {} };
+  try { margin = await marginInfo(liveCodes, tradeDays); } catch (e) { console.log(`   ⚠ 融券資格：${e.message}`); }
+  console.log(`   └ 融券資格：上市 ${margin.twse || "抓不到"}、上櫃 ${margin.tpex || "抓不到"}，${Object.keys(margin.map).length} 檔`);
   console.log(predict.ok ? `   └ 公告日預判：明天候選 ${predict.cands.length} 檔（命中率用 ${predict.days} 天快照計算）` : `   ⚠ 公告日預判：${predict.note}`);
   const lastDate = [...barsOf.values()].reduce((m, b) => (b.length && b[b.length - 1].d > (m || "") ? b[b.length - 1].d : m), null);
   const out = {
@@ -404,6 +469,7 @@ async function main() {
     best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),
     events: [...events, ...upcoming],
     predict,
+    margin,
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `window.DISP_BT = ${JSON.stringify(out)};\n`);
