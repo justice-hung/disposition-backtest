@@ -304,59 +304,164 @@ function bestOf(stats, H) {
 }
 
 
-/* ---------------- 公告日預判（讀戰情室「處置股雷達」的注意累計） ---------------- */
-// 戰情室資料來源：1) 本機旁邊的 twstock-warroom 資料夾 2) GitHub raw 3) 網站編碼檔（.bin）
-const WARROOM_LOCAL = path.join(ROOT, "..", "twstock-warroom", "public", "data");
-const WARROOM_RAW = "https://raw.githubusercontent.com/justice-hung/twstock-warroom/main/public/data";
-const WARROOM_SITE = "https://warroom.justice-hung.win/data";
-const zlib = await import("node:zlib");
-function decodeBin(buf, name) { // 與戰情室 scripts/encode-data.mjs 相同演算法
-  const K = [0x74, 0x77, 0x2d, 0x77, 0x72, 0x2d, 0x32, 0x30, 0x32, 0x36, 0x2d, 0x6a, 0x68];
-  let h = 0x811c9dc5;
-  const str = String.fromCharCode(...K) + "/" + name;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-  let x = h || 1;
-  const b = Uint8Array.from(buf);
-  for (let i = 0; i < b.length; i++) { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; b[i] ^= x & 0xff; }
-  return JSON.parse(zlib.inflateRawSync(Buffer.from(b)).toString("utf8"));
+/* ---------------- 公告日預判（自己抓注意股資料，算「明天再 1 次即處置」） ---------------- */
+// 規則：證交所／櫃買「公布或通知注意交易資訊暨處置作業要點」第 6 條（邏輯與台股盤後戰情室「處置股雷達」相同）
+const KUAN_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 十一: 11, 十二: 12, 十三: 13, 十四: 14 };
+function parseKuan(text) {
+  const out = new Set();
+  for (const m of String(text).matchAll(/第([一二三四五六七八九十]+)款/g)) if (KUAN_NUM[m[1]]) out.add(KUAN_NUM[m[1]]);
+  return [...out].sort((a, b) => a - b);
 }
-async function warroomData(name) {
-  try { return JSON.parse(fs.readFileSync(path.join(WARROOM_LOCAL, `${name}.json`), "utf8")); } catch { /* 下一個來源 */ }
-  try { const r = await fetch(`${WARROOM_RAW}/${name}.json`, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000) }); if (r.ok) return await r.json(); } catch { /* 下一個來源 */ }
+const rocAny = (s) => { const m = String(s ?? "").trim().match(/^(\d{2,3})[./](\d{1,2})[./](\d{1,2})$/); return m ? `${+m[1] + 1911}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null; };
+function tick(p) { return p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5; }
+const round2 = (v) => Math.round(v * 100) / 100;
+function limitUpPrice(prev) { const raw = prev * 1.1; let t = tick(raw); let lim = Math.floor(raw / t + 1e-9) * t; if (tick(lim) !== t) { t = tick(lim); lim = Math.floor(raw / t + 1e-9) * t; } return round2(lim); }
+function limitDownPrice(prev) { const raw = prev * 0.9; let t = tick(raw); let lim = Math.ceil(raw / t - 1e-9) * t; if (tick(lim) !== t) { t = tick(lim); lim = Math.ceil(raw / t - 1e-9) * t; } return round2(lim); }
+const trunc2 = (v) => (v >= 0 ? Math.floor(v * 100 + 1e-7) : -Math.floor(-v * 100 + 1e-7)) / 100;
+
+/** 注意次數累計（只計「最近一次處置生效日之後」的注意）；days＝交易日（舊→新，最後一天＝今天） */
+function dispositionWatch(notices, disposals, days) {
+  const today = days[days.length - 1];
+  const idx = new Set(days);
+  const by = new Map();
+  for (const n of notices) {
+    if (!idx.has(n.date)) continue;
+    const m = by.get(n.code) || new Map();
+    const k = m.get(n.date) || new Set();
+    n.kuan.forEach((x) => k.add(x));
+    m.set(n.date, k); by.set(n.code, m);
+  }
+  const lastDisp = new Map();
+  for (const d of disposals) if (d.pub <= today && (!lastDisp.get(d.code) || d.pub > lastDisp.get(d.code).pub)) lastDisp.set(d.code, d);
+  const out = {};
+  const T = days.length - 1;
+  const k1 = (x) => x === 1, k18 = (x) => x >= 1 && x <= 8;
+  for (const [code, m] of by) {
+    const ld = lastDisp.get(code);
+    const reset = ld ? ld.start || ld.pub : "";
+    const inDisp = !!(ld && ld.start && ld.end && ld.start <= today && today <= ld.end);
+    const counted = (d) => !!d && (!reset || d >= reset);
+    const has = (i, f) => { const d = days[i]; if (!counted(d)) return false; const k = m.get(d); return !!k && [...k].some(f); };
+    const consec = (f) => { let c = 0; for (let i = T; i >= 0 && has(i, f); i--) c++; return c; };
+    const count = (f, w) => { let c = 0; for (let i = T; i > T - w && i >= 0; i--) if (has(i, f)) c++; return c; };
+    const c1 = consec(k1), c18 = consec(k18), n9 = count(k18, 9), n29 = count(k18, 29);
+    const rules = [
+      { label: "連續3日第一款", need: 3 - c1, c1: true },
+      { label: "連續5日", need: 5 - c18 },
+      { label: "10日內6日", need: 6 - n9 },
+      { label: "30日內12日", need: 12 - n29 },
+    ];
+    const needs = Math.max(1, Math.min(...rules.map((r) => r.need)));
+    if (needs !== 1) continue;
+    const near = rules.filter((r) => r.need <= 1);
+    const todayK = m.get(today) && counted(today) ? [...m.get(today)].sort((a, b) => a - b) : [];
+    out[code] = { near: near.map((r) => r.label), onlyC1: near.every((r) => r.c1), todayK, inDisp };
+  }
+  return out;
+}
+
+/** 明日第一款觸發價（估）：6 日累積＝各日漲跌幅（截至小數 2 位）加總；另有「價差」條件 */
+function kuan1Trigger(mkt, c) { // c＝最近 6 個交易日收盤（舊→新）
+  if (!c || c.length < 6 || c.some((x) => !x)) return null;
+  const last = c[5];
+  if (last < 5) return { ex: "收盤價未滿5元，不適用第一款" };
+  let S5 = 0;
+  for (let i = 1; i <= 5; i++) S5 += trunc2(((c[i] - c[i - 1]) / c[i - 1]) * 100);
+  const base = c[1];
+  const [hi, lo, gap] = mkt === "櫃" ? [30, 23, 40] : [32, 25, 50];
+  const ok = (p) => { const s = S5 + trunc2(((p - last) / last) * 100); return Math.abs(s) > hi || (Math.abs(s) >= lo && Math.abs(p - base) >= gap); };
+  const up = limitUpPrice(last), dn = limitDownPrice(last);
+  const pct = (p) => (p == null ? null : round2(((p - last) / last) * 100));
+  const always = ok(last);
+  let upPx = null, dnPx = null;
+  for (let p = round2(last + tick(last)); p <= up + 1e-9; p = round2(p + tick(p))) if (ok(p) !== always) { upPx = p; break; }
+  for (let p = round2(last - tick(last - 1e-9)); p >= dn - 1e-9; p = round2(p - tick(p - 1e-9))) if (ok(p) !== always) { dnPx = p; break; }
+  return { s5: round2(S5), always: always ? 1 : 0, upPx, upPct: pct(upPx), dnPx, dnPct: pct(dnPx), lim: [up, dn] };
+}
+
+async function fetchNotices(from, to) {
+  const out = [];
+  const ymd = (s) => s.replace(/-/g, ""), slash = (s) => s.replace(/-/g, "/");
+  const isStock = (c) => /^[1-9]\d{3}$/.test(c);
+  let ok = 0;
   try {
-    const r = await fetch(`${WARROOM_SITE}/${name}.bin`, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000) });
-    if (r.ok && !(r.headers.get("content-type") || "").includes("html")) return decodeBin(Buffer.from(await r.arrayBuffer()), name);
-  } catch { /* 沒有 */ }
-  return null;
+    const j = await getJSON(`https://www.twse.com.tw/rwd/zh/announcement/notice?querytype=1&stockNo=&selectType=&startDate=${ymd(from)}&endDate=${ymd(to)}&sortKind=STKNO&response=json`);
+    for (const r of j.data || []) if (isStock(String(r[1]).trim())) out.push({ code: String(r[1]).trim(), name: String(r[2]).trim(), mkt: "市", date: rocAny(r[5]), kuan: parseKuan(r[4]) });
+    ok++;
+  } catch (e) { console.log(`   ⚠ 上市注意股：${e.message}`); }
+  await sleep(2500);
+  try {
+    const j = await getJSON(`https://www.tpex.org.tw/www/zh-tw/bulletin/attention?startDate=${slash(from)}&endDate=${slash(to)}&response=json`);
+    for (const r of (j.tables?.[0]?.data) || []) if (isStock(String(r[1]).trim())) out.push({ code: String(r[1]).trim(), name: String(r[2]).trim(), mkt: "櫃", date: rocAny(r[5]), kuan: parseKuan(r[4]) });
+    ok++;
+  } catch (e) { console.log(`   ⚠ 上櫃注意股：${e.message}`); }
+  return { notices: out, ok };
 }
-// 雷達的 watch 列：[代號,名稱,市場,收盤,漲跌%,連續第一款,連續1~8款,10日內,30日內,還差次數,接近規則,任一款即算,今日款次,近10日軌跡,觸發價,處置中]
-const predCat = (r) => (!/第一款/.test(r[10]) ? "other" : r[14]?.always ? "always" : "price");
-async function predictions(events, tradeDays) {
-  const latest = await warroomData("latest");
-  const X = latest?.disposition;
-  if (!X?.watch) return { ok: false, note: "讀不到戰情室的處置股雷達資料" };
-  const cands = X.watch.filter((r) => r[9] === 1).map((r) => ({
-    code: r[0], name: r[1], mkt: r[2], close: r[3], pct: r[4], k: r[15] ? 2 : 1, cat: predCat(r),
-    rule: r[10], todayK: r[12], tr: r[14] || {},
-  }));
-  // 命中率：用戰情室每天的快照，看「明天再1次即處置」的股票，下個交易日是否真的公告處置
-  const pubs = new Set(events.map((e) => `${e.code}|${e.pub}`));
+
+async function tradingDaysUpTo(today) {
+  // 交易日：證交所每月成交統計（FMTQIK），抓最近 6 個月；下個交易日用休市日表推算
+  const days = new Set();
+  const t = new Date(`${today}T12:00:00`);
+  for (let k = 5; k >= 0; k--) {
+    const m = new Date(t.getFullYear(), t.getMonth() - k, 1);
+    try {
+      const j = await getJSON(`https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=${m.getFullYear()}${pad(m.getMonth() + 1)}01&response=json`);
+      for (const r of j.data || []) { const iso = rocAny(r[0]); if (iso && iso <= today) days.add(iso); }
+    } catch { /* 略過 */ }
+    await sleep(2000);
+  }
+  let holidays = new Set();
+  try {
+    const h = await getJSON("https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json");
+    holidays = new Set((h.data || []).filter((r) => !/交易/.test(r[1] || "")).map((r) => String(r[0]).trim()));
+  } catch { /* 沒有就只排除週末 */ }
+  const addD = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoOf(d); };
+  const isTrading = (iso) => { const w = new Date(`${iso}T12:00:00`).getDay(); return w !== 0 && w !== 6 && !holidays.has(iso); };
+  const nextTrading = (iso) => { let x = addD(iso, 1); while (!isTrading(x)) x = addD(x, 1); return x; };
+  return { days: [...days].sort(), nextTrading };
+}
+
+async function predictions(disposals, events, today, listFrom) {
+  const cal = await tradingDaysUpTo(today);
+  if (cal.days.length < 40) return { ok: false, note: "抓不到交易日曆" };
+  const { notices, ok } = await fetchNotices(listFrom, today);
+  if (!ok) return { ok: false, note: "抓不到注意股資料" };
+  const asOf = cal.days[cal.days.length - 1];
+  const next = cal.nextTrading(asOf);
+  const nameOf = new Map(notices.map((n) => [n.code, [n.name, n.mkt]]));
+  const disp = disposals.map((d) => ({ code: d.code, pub: d.pub, start: d.start, end: d.end }));
+
+  // 今天的候選
+  const W = dispositionWatch(notices, disp, cal.days.slice(-40));
+  const cands = [];
+  for (const [code, w] of Object.entries(W)) {
+    const [name, mkt] = nameOf.get(code) || [code, ""];
+    let bars = [];
+    try { bars = await getBars(mkt, code, isoOf(new Date(new Date(`${asOf}T12:00:00`).getTime() - 40 * 86400000)).slice(0, 8) + "01", new Date(`${asOf}T12:00:00`)); } catch { /* 沒價格就不算觸發價 */ }
+    const C = bars.filter((b) => b.d <= asOf).map((b) => b.c);
+    const last = C[C.length - 1], prev = C[C.length - 2];
+    const tr = w.onlyC1 ? kuan1Trigger(mkt, C.slice(-6)) : null;
+    cands.push({ code, name, mkt, close: last ?? null, pct: last && prev ? round2((last / prev - 1) * 100) : null,
+      k: w.inDisp || disposals.some((d) => d.code === code && d.pub <= asOf && d.pub >= cal.days[Math.max(0, cal.days.length - 31)]) ? 2 : 1,
+      inDisp: w.inDisp, cat: !w.onlyC1 ? "other" : tr && tr.always ? "always" : "price", rule: w.near.join("、"), todayK: w.todayK, tr: tr || {} });
+  }
+  // 命中率：倒回去每一天算一次候選名單，看下一個交易日有沒有真的被公告處置
+  const pubs = new Set(disposals.map((d) => `${d.code}|${d.pub}`));
   const hit = {};
-  let days = 0;
-  for (const d of tradeDays.slice(-40)) {
-    const snap = await warroomData(d);
-    const W = snap?.disposition;
-    if (!W?.watch || !W.next || W.next > tradeDays[tradeDays.length - 1]) continue; // 結果還沒出來的不算
-    days++;
-    for (const r of W.watch) {
-      if (r[9] !== 1) continue;
-      const key = predCat(r) + (r[15] ? "_in" : "");
+  let ndays = 0;
+  const D = cal.days;
+  for (let i = 40; i < D.length - 1; i++) {
+    if (D[i] < RULE_START) continue;
+    ndays++;
+    const Wi = dispositionWatch(notices, disp, D.slice(i - 39, i + 1));
+    for (const [code, w] of Object.entries(Wi)) {
+      const key = (w.onlyC1 ? "c1" : "other") + (w.inDisp ? "_in" : "");
       const h = (hit[key] = hit[key] || { n: 0, hit: 0 });
       h.n++;
-      if (pubs.has(`${r[0]}|${W.next}`)) h.hit++;
+      if (pubs.has(`${code}|${D[i + 1]}`)) h.hit++;
     }
   }
-  return { ok: true, asOf: X.asOf, next: X.next, cands, hit, days };
+  return { ok: true, asOf, next, cands, hit, days: ndays, src: "注意股公告" };
 }
 
 /* ---------------- 融券資格（可不可以放空） ---------------- */
@@ -450,13 +555,13 @@ async function main() {
   const stats = aggregate(events);
   const tradeDays = [...new Set([...barsOf.values()].flatMap((b) => b.map((x) => x.d)))].sort().filter((d) => d >= RULE_START);
   let predict = { ok: false, note: "" };
-  try { predict = await predictions([...events, ...upcoming], tradeDays); } catch (e) { predict = { ok: false, note: e.message }; }
+  try { predict = await predictions(raw, [...events, ...upcoming], todayIso, listFrom); } catch (e) { predict = { ok: false, note: e.message }; }
   const liveCodes = [...new Set([...events, ...upcoming].filter((e) => (e.next || []).length || e.status !== "done").map((e) => e.code)
     .concat(predict.ok ? predict.cands.map((c) => c.code) : []))];
   let margin = { map: {} };
   try { margin = await marginInfo(liveCodes, tradeDays); } catch (e) { console.log(`   ⚠ 融券資格：${e.message}`); }
   console.log(`   └ 融券資格：上市 ${margin.twse || "抓不到"}、上櫃 ${margin.tpex || "抓不到"}，${Object.keys(margin.map).length} 檔`);
-  console.log(predict.ok ? `   └ 公告日預判：明天候選 ${predict.cands.length} 檔（命中率用 ${predict.days} 天快照計算）` : `   ⚠ 公告日預判：${predict.note}`);
+  console.log(predict.ok ? `   └ 公告日預判：${predict.next} 候選 ${predict.cands.length} 檔（命中率用 ${predict.days} 個交易日回推）` : `   ⚠ 公告日預判：${predict.note}`);
   const lastDate = [...barsOf.values()].reduce((m, b) => (b.length && b[b.length - 1].d > (m || "") ? b[b.length - 1].d : m), null);
   const out = {
     generatedAt: `${todayIso} ${pad(today.getHours())}:${pad(today.getMinutes())}`,
