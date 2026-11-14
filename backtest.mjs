@@ -48,9 +48,11 @@ const ENTRIES = [ // [key, 名稱, 說明, 盤後看得到訊號後還來得及�
   ["L7", "掛低接−7%", "處置期間掛限價買單在『公告日收盤×0.93』，盤中碰到就成交", true],
   ["L10", "掛低接−10%", "處置期間掛限價買單在『公告日收盤×0.90』，盤中碰到就成交", true],
   ["VC", "量縮收斂→隔日開盤", "處置期間某天成交量 < 處置前 5 日均量的一半、振幅比前一天小、而且收紅（收盤 > 前一天），隔天開盤買", true],
+  ["SX", "出關首日開盤放空", "處置結束後第 1 個交易日開盤融券／借券賣出，抱 N 天回補（出關後追買的回測勝率都不到 5 成，反過來做空；要有券、漲幅風險無上限）", true],
   ["S5", "D5收盤放空", "處置第 5 天收盤融券／借券賣出，抱 N 天回補（報酬已換算成做空的賺賠；回檔＝持有期間最大反向漲幅）", true],
 ];
-const KIND = { VC: "open", B: "open", X0: "open", F: "open", M5: "open", M10: "open", M20: "open", L5: "limit", L7: "limit", L10: "limit", S5: "short" }; // 其餘為收盤買
+const KIND = { VC: "open", B: "open", X0: "open", F: "open", M5: "open", M10: "open", M20: "open", L5: "limit", L7: "limit", L10: "limit", S5: "short", SX: "short" }; // 其餘為收盤買
+const AT_OPEN = { SX: true }; // 做空但在開盤進場
 const LIMITS = { L5: 0.05, L7: 0.07, L10: 0.10 };
 const GROUPS = [
   ["all", "全部", () => true],
@@ -74,7 +76,35 @@ const GROUPS = [
   ["instBuy", "處置前法人買超", (e) => e.inst3 != null && e.inst3 > 0],
   ["instSell", "處置前法人賣超", (e) => e.inst3 != null && e.inst3 < 0],
   ["volDry", "處置期間量縮<5成", (e) => e.volRatio != null && e.volRatio < 0.5],
+  ["k1s2", "第一次・評分≥2", (e) => e.k === 1 && e.score != null && e.score >= 2],
+  ["k1s2g", "第一次・評分≥2＋開盤≤3%", (e) => e.k === 1 && e.score != null && e.score >= 2 && e.gap != null && e.gap <= 0.03],
+  ["k1s1", "第一次・評分≤1", (e) => e.k === 1 && e.score != null && e.score <= 1],
+  ["cold", "冷門股（日均額<1億）", (e) => e.amt != null && e.amt < 1],
+  ["k1r", "第一次・前10日漲<30%", (e) => e.k === 1 && e.run10 != null && e.run10 < 0.3],
+  ["sfY", "有股票期貨", (e) => e.fut === 1],
+  ["sfN", "沒有股票期貨", (e) => e.fut === 0],
+  ["k1sfY", "第一次・有股票期貨", (e) => e.k === 1 && e.fut === 1],
+  ["k2pd", "第二次・公告日跌≥3%", (e) => e.k === 2 && e.pubchg != null && e.pubchg <= -0.03],
 ];
+// 評分（0~3）：股價≥100、處置前 5 日均成交金額≥5 億、月線乖離≤25%，各 1 分（公告當晚就知道）
+const SCORE = [["股價≥100元", (f) => f.px0 >= 100], ["日均成交≥5億", (f) => f.amt != null && f.amt >= 5], ["月線乖離≤25%", (f) => f.bias20 != null && f.bias20 <= 0.25]];
+/** 公告日（p＝處置開始前一個交易日）就知道的特徵 */
+function preFeatures(bars, p) {
+  const C = (i) => bars[i].c;
+  const m20 = sma(bars.map((b) => b.c), 20, p);
+  const preV = bars.slice(Math.max(0, p - 4), p + 1).map((b) => b.v).filter((v) => v != null);
+  const preAvg = preV.length ? preV.reduce((a, b) => a + b, 0) / preV.length : null;
+  const f = {
+    px0: C(p), bias20: m20 ? r4(C(p) / m20 - 1) : null,
+    run10: p >= 10 ? r4(C(p) / C(p - 10) - 1) : null,
+    pubchg: p >= 1 ? r4(C(p) / C(p - 1) - 1) : null,
+    preVol: preAvg ? Math.round(preAvg) : null,
+    amt: preAvg ? Math.round(preAvg * C(p) / 1e5 * 100) / 100 : null, // 億元（張×元×1000÷1e8）
+  };
+  f.sf = SCORE.map(([, fn]) => (fn(f) ? 1 : 0));
+  f.score = f.sf.reduce((a, b) => a + b, 0);
+  return f;
+}
 const GROUP_FN = Object.fromEntries(GROUPS.map(([k, , f]) => [k, f]));
 
 /* ---------------- 小工具 ---------------- */
@@ -202,6 +232,28 @@ async function getBars(mkt, code, fromIso, today) {
   return bars;
 }
 
+/* ---------------- 股票期貨標的（期交所） ---------------- */
+function parseFutures(html) {
+  const out = new Set();
+  for (const tr of String(html).split(/<tr[\s>]/i).slice(1)) {
+    const td = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1].replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim());
+    if (td.length >= 5 && /^[1-9]\d{3}$/.test(td[2]) && td[4]) out.add(td[2]); // 第 5 欄＝是否為股票期貨標的
+  }
+  return [...out];
+}
+async function futuresSet() {
+  const file = path.join(CACHE_DIR, "futures.json");
+  try {
+    const list = parseFutures(await download("https://www.taifex.com.tw/cht/2/stockLists"));
+    if (list.length < 50) throw new Error(`只解析到 ${list.length} 檔`);
+    fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(file, JSON.stringify(list));
+    return new Set(list);
+  } catch (e) {
+    console.log(`   ⚠ 股票期貨標的：${e.message}（改用上次存的名單）`);
+    try { return new Set(JSON.parse(fs.readFileSync(file, "utf8"))); } catch { return null; }
+  }
+}
+
 /* ---------------- 回測 ---------------- */
 const sma = (C, n, i) => (i < n - 1 ? null : C.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n);
 
@@ -222,6 +274,7 @@ function analyse(ev, bars, ctx = {}) {
     for (let i = s; i <= e; i++) if (bars[i].l <= P) { ent[k] = [i, 1, Math.min(P, bars[i].o)]; break; }
   }
   if (s + 4 <= e) ent.S5 = [s + 4, 0, null, -1];
+  ent.SX = [e + 1, 1, null, -1];
   // 量縮收斂往上：成交量 < 處置前 5 日均量一半、振幅縮小、收紅
   const preV = bars.slice(Math.max(0, s - 5), s).map((b) => b.v).filter((v) => v != null);
   const preAvg = preV.length ? preV.reduce((a, b) => a + b, 0) / preV.length : null;
@@ -254,7 +307,7 @@ function analyse(ev, bars, ctx = {}) {
   if (i < s - 1) { /* 尚未公告到處置 */ }
   else if (i === s - 1) next.push("B", "D1");                 // 今天公告，明天處置第 1 天
   else if (i < eEnd) { if (i - s + 2 <= 5) next.push(`D${i - s + 2}`); }             // 處置中，明天第 k+1 天收盤
-  else if (i === eEnd) next.push("X0", "X1");                  // 今天處置最後一天，明天出關
+  else if (i === eEnd) next.push("X0", "X1", "SX");                  // 今天處置最後一天，明天出關
   if (i === e + 2) next.push("X3");
   if (i === s + 3 && eEnd >= s + 4) next.push("S5");                   // 明天處置第 5 天收盤空
   if (i >= s - 1 && i < eEnd) {                                         // 處置期間（含明天開始）還可以掛低接
@@ -267,16 +320,16 @@ function analyse(ev, bars, ctx = {}) {
   if (firstDown() === i) next.push("F");
   if (vc === i) next.push("VC");
   if (s <= i && i <= e + 10) for (const n of [5, 10, 20]) if (firstBelow(n) === i) next.push(`M${n}`);
-  const m20 = sma(C, 20, s - 1);
+  const pf = preFeatures(bars, s - 1);
   const dispV = bars.slice(s, Math.min(e, i) + 1).map((b) => b.v).filter((v) => v != null);
   const volRatio = preAvg > 0 && dispV.length ? r4(dispV.reduce((a, b) => a + b, 0) / dispV.length / preAvg) : null;
   const mk = ctx.market && ctx.market[D[s - 1]];
   const inst3 = ctx.inst ? ctx.inst(ev.mkt, ev.code, [D[s - 3], D[s - 2], D[s - 1]]) : null;
   return {
     code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null,
-    bias20: m20 ? r4(C[s - 1] / m20 - 1) : null,
-    px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
-    volRatio, mk20: mk ? mk.above : null, inst3, preVol: preAvg ? Math.round(preAvg) : null,
+    bias20: pf.bias20, px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
+    run10: pf.run10, pubchg: pf.pubchg, amt: pf.amt, score: pf.score, sf: pf.sf,
+    volRatio, mk20: mk ? mk.above : null, inst3, preVol: pf.preVol, fut: ctx.futures ? (ctx.futures.has(ev.code) ? 1 : 0) : null,
     status: i < s ? "pre" : i <= eEnd ? `d${i - s + 1}` : i <= e + 10 ? "post" : "done",
     close: C[i], next, r,
     // 逐日：[漲跌幅, 開收差, 振幅]，順序＝處前2、處前1、處置1~5、出關1~3（沒有的為 null）
@@ -596,6 +649,18 @@ const HIST_FILE = path.join(ROOT, "history.json");
 const TRACK_HOLD = 5;
 const tickFloor = (p) => { const t = tick(p); return Math.round(Math.floor(p / t + 1e-9) * t * 100) / 100; };
 const gradeOf = (w, n) => (w == null || n < 8 ? "C" : w >= 0.6 ? "A" : w >= 0.55 ? "B" : w >= 0.5 ? "C" : "D");
+/** 卡片用哪一組回測數字（網頁 index.html 的 planStat 要跟這裡一致） */
+function planStat(st, e, k, grp) {
+  let s = st(grp, k), note = grp;
+  if (!s || s.n < 8) { s = st(e.k === 1 ? "k1" : "k2", k); note = e.k === 1 ? "k1" : "k2"; }
+  if (k === "B" && e.k === 1 && e.score != null) {
+    const g = e.score >= 2 ? "k1s2g" : "k1s1";
+    const x = st(g, "B");
+    if (x && x.n >= 8) { s = x; note = g; }
+  }
+  if (e.amt != null && e.amt < 1 && KIND[k] !== "short") { const x = st("cold", k); if (x && x.n >= 8) { s = x; note = "cold"; } }
+  return { st: s, note };
+}
 function planItems(events, stats) {
   const st = (g, k) => (stats[g] && stats[g][k] && stats[g][k][5]) || null;
   const items = [];
@@ -606,9 +671,7 @@ function planItems(events, stats) {
     for (const k of (e.next || []).filter((k) => KIND[k] === "limit")) { const s0 = st(grp, k); const w = s0 && s0.n >= 8 ? s0.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
     for (const k of e.next || []) {
       if (KIND[k] === "limit" && k !== (bestL && bestL.k)) continue;
-      let s = st(grp, k);
-      if (!s || s.n < 8) s = st(e.k === 1 ? "k1" : "k2", k);
-      if (k === "B" && grp === "k1p") s = st("k1pg", "B") || s;
+      const s = planStat(st, e, k, grp).st;
       items.push({ code: e.code, name: e.name, mkt: e.mkt, k: e.k, entry: k, kind: KIND[k] || "close", grade: gradeOf(s && s.win, s ? s.n : 0),
         win: s ? s.win : null, px0: e.px0, limit: LIMITS[k] ? tickFloor(e.px0 * (1 - LIMITS[k])) : null, end: e.end });
     }
@@ -622,7 +685,7 @@ function settle(it, plan, bars) {
   const D = bars.map((b) => b.d), C = bars.map((b) => b.c);
   const n = D.indexOf(plan.next);
   if (n < 0) return { status: plan.next > (D[D.length - 1] || "") ? "待執行" : "沒交易" };
-  let idx = n, px, open = it.kind === "open" || it.kind === "limit", dir = it.kind === "short" ? -1 : 1;
+  let idx = n, px, open = it.kind === "open" || it.kind === "limit" || !!AT_OPEN[it.entry], dir = it.kind === "short" ? -1 : 1;
   if (it.kind === "limit") {
     idx = -1;
     for (let j = n; j < bars.length && D[j] <= it.end; j++) if (bars[j].l <= it.limit) { idx = j; px = Math.min(it.limit, bars[j].o); break; }
@@ -698,6 +761,116 @@ function notifyText(out, track) {
   return L.join("\n");
 }
 
+/* ---------------- 策略實驗室：出場比較、評分、月份、資金曲線 ---------------- */
+// 出場規則：回傳扣成本後報酬；open＝開盤進場（當天也算持有日）
+function exitRet(rule, bars, idx, px, open, e) {
+  const N = bars.length, first = open ? idx : idx + 1, cap = idx + 19;
+  const fin = (p) => p / px - 1 - COST;
+  let m = rule.match(/^H(\d+)$/);
+  if (m) { const x = open ? idx + +m[1] - 1 : idx + +m[1]; return x < N ? fin(bars[x].c) : null; }
+  if (rule === "END") return e >= first && e < N ? fin(bars[e].c) : null;
+  if (rule === "X0") return e + 1 < N && e + 1 > idx ? fin(bars[e + 1].o) : null;
+  const sig = (f) => { for (let j = first; j <= cap; j++) { if (j >= N) return null; if (f(j)) return j + 1 < N ? fin(bars[j + 1].o) : null; } return cap < N ? fin(bars[cap].c) : null; };
+  if (rule === "MA5") { const C = bars.map((b) => b.c); return sig((j) => { const a = sma(C, 5, j); return a != null && C[j] < a; }); }
+  m = rule.match(/^TR(\d+)$/);
+  if (m) { const x = +m[1] / 100; let hi = px; return sig((j) => { hi = Math.max(hi, bars[j].c); return bars[j].c <= hi * (1 - x); }); }
+  m = rule.match(/^TP(\d+)H(\d+)$/);
+  if (m) {
+    const tg = px * (1 + +m[1] / 100), x = open ? idx + +m[2] - 1 : idx + +m[2];
+    if (x >= N) return null;
+    for (let j = first; j <= x; j++) { if (j === idx) continue; if (bars[j].h >= tg) return fin(Math.max(tg, bars[j].o)); } // 進場當天不算（不知道先後）
+    return fin(bars[x].c);
+  }
+  return null;
+}
+const EXIT_RULES = [["H3", "抱 3 天收盤"], ["H5", "抱 5 天收盤"], ["END", "處置最後一天收盤"], ["X0", "出關首日開盤"], ["H10", "抱 10 天收盤"],
+  ["TP10H5", "＋10% 停利，沒到抱 5 天"], ["MA5", "收盤破 5 日線→隔天開盤"], ["TR8", "從高點回落 8%→隔天開盤"]];
+const sumStat = (a) => {
+  a = a.filter((x) => x != null).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const mid = a.length >> 1;
+  return { n: a.length, win: r4(a.filter((x) => x > 0).length / a.length), mean: r4(a.reduce((x, y) => x + y, 0) / a.length), median: r4(a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2) };
+};
+function lab(events, barsOf) {
+  const ix = (ev) => { const bars = barsOf.get(`${ev.mkt}${ev.code}`) || []; const s = bars.findIndex((b) => b.d >= ev.start); let e = -1; bars.forEach((b, i) => { if (b.d <= ev.end) e = i; }); return { bars, s, e }; };
+  const entB = (ev, x) => [x.s, x.bars[x.s].o, true];
+  const entL = (pc) => (ev, x) => { const P = x.bars[x.s - 1].c * (1 - pc); for (let i = x.s; i <= x.e; i++) if (x.bars[i].l <= P) return [i, Math.min(P, x.bars[i].o), true]; return null; };
+  const done = events.filter((e) => e.r && Object.keys(e.r).length);
+  const net = (e, k, H = 5) => (e.r[k] && e.r[k][H] ? e.r[k][H][0] - COST : null);
+
+  // 1. 出場比較（只算每種出場都算得出來的事件，才能公平比）
+  const sets = [["第一次・評分≥2＋開盤≤3%｜D1開盤買", (e) => GROUP_FN.k1s2g(e), entB], ["第一次全部｜D1開盤買", (e) => e.k === 1, entB],
+    ["第二次｜掛低接−7%", (e) => e.k === 2, entL(0.07)], ["第二次｜掛低接−10%", (e) => e.k === 2, entL(0.10)]];
+  const exits = sets.map(([name, f, ent]) => {
+    const rows = [];
+    for (const ev of done.filter(f)) {
+      const x = ix(ev); if (x.s < 1 || x.e < x.s) continue;
+      const t = ent(ev, x); if (!t || !t[1]) continue;
+      const o = {}; let ok = true;
+      for (const [r] of EXIT_RULES) { o[r] = exitRet(r, x.bars, t[0], t[1], t[2], x.e); if (o[r] == null) ok = false; }
+      if (ok) rows.push(o);
+    }
+    return { name, n: rows.length, cells: Object.fromEntries(EXIT_RULES.map(([r]) => [r, sumStat(rows.map((o) => o[r]))])) };
+  });
+
+  // 2. 評分 0~3 對應的實際表現
+  const score = {};
+  for (const H of HOLDS) score[H] = [0, 1, 2, 3].map((sc) => ({ s: sc,
+    k1B: sumStat(done.filter((e) => e.k === 1 && e.score === sc).map((e) => net(e, "B", H))),
+    k2L: sumStat(done.filter((e) => e.k === 2 && e.score === sc).map((e) => net(e, "L7", H))) }));
+
+  // 3. 月份別（看行情好壞差多少）
+  const months = [...new Set(done.map((e) => e.start.slice(0, 7)))].sort();
+  const MCOLS = [["k1B", "第一次・D1開盤買", (e) => e.k === 1, "B"], ["k1s", "第一次・評分≥2", (e) => GROUP_FN.k1s2(e), "B"], ["k2L", "第二次・掛低接−7%", (e) => e.k === 2, "L7"], ["S5", "D5收盤放空", () => true, "S5"], ["SX", "出關開盤放空", () => true, "SX"]];
+  const monthly = { cols: MCOLS.map(([k, n]) => [k, n]), rows: months.map((m) => ({ m, ...Object.fromEntries(MCOLS.map(([k, , f, en]) => [k, sumStat(done.filter((e) => e.start.startsWith(m) && f(e)).map((e) => net(e, en)))])) })) };
+
+  // 4. 出關後多久又被處置
+  const by = {};
+  for (const ev of events) (by[ev.mkt + ev.code] = by[ev.mkt + ev.code] || []).push(ev);
+  const gaps = []; let fin = 0;
+  for (const L of Object.values(by)) {
+    L.sort((a, b) => a.start.localeCompare(b.start));
+    L.forEach((ev, i) => {
+      if (ev.status !== "done" && ev.status !== "post") return;
+      fin++;
+      const nx = L[i + 1]; if (!nx) return;
+      const { bars, e } = ix(ev); const j = bars.findIndex((b) => b.d >= nx.start);
+      if (j >= 0 && e >= 0) gaps.push(j - e - 1); // 出關後隔幾個交易日又開始處置（0＝無縫接軌）
+    });
+  }
+  gaps.sort((a, b) => a - b);
+  const redisp = { done: fin, again: gaps.length, seamless: gaps.filter((g) => g <= 0).length, in10: gaps.filter((g) => g > 0 && g <= 10).length, later: gaps.filter((g) => g > 10).length, median: gaps.length ? gaps[gaps.length >> 1] : null };
+
+  // 5. 資金曲線：每筆固定投入一樣的金額，照規則每次都做，抱 5 天
+  const STRATS = [
+    ["s1", "第一次・評分≥2・開盤≤3%：D1 開盤買", (e) => GROUP_FN.k1s2g(e), "B"],
+    ["s2", "第二次・股價≥100：掛 −7% 低接", (e) => e.k === 2 && e.px0 >= 100, "L7"],
+    ["base", "對照組：所有處置股 D1 開盤買", () => true, "B"],
+  ];
+  const tdays = [...new Set([...barsOf.values()].flatMap((b) => b.map((x) => x.d)))].sort();
+  const equity = STRATS.map(([key, name, f, en]) => {
+    const tr = [];
+    for (const ev of done.filter(f)) {
+      const r = ev.r[en]; if (!r || !r[5]) continue;
+      const bars = barsOf.get(`${ev.mkt}${ev.code}`) || []; const i = bars.findIndex((b) => b.d === r.d);
+      const x = bars[i + 4]; if (i < 0 || !x) continue;
+      tr.push({ in: r.d, out: x.d, ret: r[5][0] - COST });
+    }
+    tr.sort((a, b) => a.out.localeCompare(b.out) || a.in.localeCompare(b.in));
+    let cum = 0, peak = 0, mdd = 0, streak = 0, maxStreak = 0;
+    const pts = [];
+    for (const t of tr) {
+      cum += t.ret; peak = Math.max(peak, cum); mdd = Math.min(mdd, cum - peak);
+      streak = t.ret > 0 ? 0 : streak + 1; maxStreak = Math.max(maxStreak, streak);
+      if (pts.length && pts[pts.length - 1][0] === t.out) pts[pts.length - 1][1] = r4(cum); else pts.push([t.out, r4(cum)]);
+    }
+    let maxOpen = 0;
+    for (const d of tdays) { const c = tr.filter((t) => t.in <= d && d <= t.out).length; if (c > maxOpen) maxOpen = c; }
+    return { key, name, n: tr.length, win: tr.length ? r4(tr.filter((t) => t.ret > 0).length / tr.length) : null, sum: r4(cum), mdd: r4(mdd), streak: maxStreak, maxOpen, pts };
+  });
+  return { exitRules: EXIT_RULES, exits, score, scoreNames: SCORE.map((x) => x[0]), monthly, redisp, equity };
+}
+
 /* ---------------- 主程式 ---------------- */
 async function main() {
   const t0 = Date.now();
@@ -748,7 +921,9 @@ async function main() {
   }
   let inst = null;
   try { inst = await instLoader(instDates); } catch (e) { console.log(`   ⚠ 法人資料：${e.message}`); }
-  const ctx = { market: cal.market, inst };
+  const futures = await futuresSet();
+  console.log(`   └ 股票期貨標的：${futures ? futures.size + " 檔" : "抓不到"}`);
+  const ctx = { market: cal.market, inst, futures };
 
   const events = [], upcoming = [];
   for (const ev of evs) {
@@ -756,7 +931,8 @@ async function main() {
     const a = bars.length ? analyse(ev, bars, ctx) : null;
     if (a) events.push(a);
     else if (bars.length && ev.start > bars[bars.length - 1].d) {
-      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, bias20: null, status: "pre", close: bars[bars.length - 1].c, px0: bars[bars.length - 1].c, gap: null, next: ["B", "D1", "L5", "L7", "L10"], r: {} });
+      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, status: "pre", close: bars[bars.length - 1].c, gap: null, fut: futures ? (futures.has(ev.code) ? 1 : 0) : null, next: ["B", "D1", "L5", "L7", "L10"], r: {},
+        ...(({ px0, bias20, run10, pubchg, amt, score, sf, preVol }) => ({ px0, bias20, run10, pubchg, amt, score, sf, preVol }))(preFeatures(bars, bars.length - 1)) });
     }
   }
   const stats = aggregate(events);
@@ -774,13 +950,15 @@ async function main() {
   try { track = await trackRecord(lastDate, predict.next || cal.nextTrading(lastDate), [...events, ...upcoming], stats, predict, raw, barsOf); }
   catch (e) { console.log(`   ⚠ 實戰紀錄：${e.message}`); }
   try { writeKline(barsOf); } catch (e) { console.log(`   ⚠ K 線資料：${e.message}`); }
+  let labOut = null;
+  try { labOut = lab([...events, ...upcoming], barsOf); } catch (e) { console.log(`   ⚠ 策略實驗室：${e.message}`); }
   const mdays = Object.keys(cal.market).sort();
   const out = {
     generatedAt: `${todayIso} ${pad(today.getHours())}:${pad(today.getMinutes())}`,
     asOf: lastDate,
     ruleStart: RULE_START,
     cost: COST, holds: HOLDS, minN: MIN_N,
-    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: LIMITS[key] })),
+    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: LIMITS[key], open: AT_OPEN[key] ? 1 : undefined })),
     groups: GROUPS.map(([key, name]) => ({ key, name })),
     stats,
     best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),
@@ -789,6 +967,7 @@ async function main() {
     margin,
     market: { today: cal.market[mdays[mdays.length - 1]] ? { date: mdays[mdays.length - 1], ...cal.market[mdays[mdays.length - 1]] } : null },
     track,
+    lab: labOut,
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `window.DISP_BT = ${JSON.stringify(out)};\n`);
