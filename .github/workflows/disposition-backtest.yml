@@ -1,11 +1,11 @@
-# 處置股回測：每個交易日盤後自動抓證交所／櫃買處置公告與日 K、重算回測，
-# 把 data.js 和 cache/ 推回 repo，GitHub Pages 會自動重新發佈網頁。
+# 處置股回測：每個交易日盤後自動抓證交所／櫃買處置公告、注意股、日 K、法人、融券資料，重算回測，
+# 把結果推回 repo，GitHub Pages 自動重新發佈網頁；有設定 LINE 金鑰就推播作戰清單。
 name: 處置股回測每日更新
 
 on:
   schedule:
-    - cron: "40 11 * * 1-5"   # 台灣時間週一到週五 19:40（等戰情室 19:00 的處置股雷達資料推上來；排程可能延遲 10~30 分鐘）
-    - cron: "17 14 * * 1-5"   # 22:17 備援：GitHub 偶爾會漏跑排程，再跑一次；資料沒變就不會提交
+    - cron: "40 11 * * 1-5"   # 台灣時間週一到週五 19:40（排程可能延遲 10~30 分鐘）
+    - cron: "17 14 * * 1-5"   # 22:17 備援：GitHub 偶爾會漏跑排程；同一天不會重複通知
   workflow_dispatch:           # 可在 Actions 頁手動執行
 
 permissions:
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +30,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add data.js cache
+          git add data.js cache history.json k
           if git diff --cached --quiet; then echo "沒有變更"; exit 0; fi
           git commit -m "回測更新 $(TZ=Asia/Taipei date +%F' '%H:%M)"
           for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 10; done
+      - name: LINE 通知
+        if: always()
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+        run: node notify.mjs

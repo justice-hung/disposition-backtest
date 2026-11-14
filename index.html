@@ -151,6 +151,25 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
   .seg button { padding: 6px 8px; font-size: 12px; }
 }
 .dchart + .legend { margin-top: 28px !important; }
+.banner { margin-top: 16px; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; line-height: 1.6; border: 1px solid; }
+.banner.dn { background: rgba(248,113,113,.08); border-color: rgba(248,113,113,.4); color: #fecaca; }
+.banner.up { background: rgba(52,211,153,.07); border-color: rgba(52,211,153,.35); color: #a7f3d0; }
+.banner b { color: #fff; }
+.star-btn { border: 0; background: transparent; color: var(--t4); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
+.star-btn.on { color: #facc15; }
+.kbtn { cursor: pointer; }
+.kbtn:hover { text-decoration: underline; }
+.stop { grid-column: 1 / 4; font-size: 12px; color: var(--t3); }
+.stop b { color: #fca5a5; }
+.watch { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.kmodal { position: fixed; inset: 0; z-index: 30; background: rgba(2,6,23,.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.kmodal[hidden] { display: none; }
+.kbox { width: min(900px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.khead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: var(--t1); }
+.khead button { border: 0; background: transparent; color: var(--t3); font-size: 18px; cursor: pointer; }
+#kbody svg { width: 100%; height: auto; display: block; }
+.tile .big2 { font-size: 22px; font-weight: 900; color: #fff; }
+@media (max-width: 640px) { #trackTiles { grid-template-columns: repeat(2, minmax(0,1fr)) !important; } }
 .tip { position: fixed; z-index: 20; pointer-events: none; display: none; background: #0f172af2; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: var(--t2); box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: 260px; }
 .tip b { color: #fff; }
 
@@ -172,6 +191,13 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
     <div class="holdbox">持有天數 <span class="seg" id="segHold"></span></div>
   </header>
 
+  <div id="mktBanner"></div>
+
+  <section style="--accent: #facc15" id="watchSec" hidden>
+    <div class="sh"><div><h2>我的追蹤</h2><p>在卡片或表格點 ☆ 加入；只存在這台裝置的瀏覽器。</p></div></div>
+    <div class="sb"><div class="watch" id="watch"></div></div>
+  </section>
+
   <section style="--accent: var(--amber)">
     <div class="sh">
       <div><h2 id="planTitle">明天作戰清單</h2><p>依回測勝率排序；★＝該處置次數回測最佳買點。資料收盤後更新，這裡只列明天來得及執行的。</p></div>
@@ -185,6 +211,17 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
   <section style="--accent: var(--sky)">
     <div class="sh"><div><h2>目前最佳買點</h2><p id="bestSub"></p></div></div>
     <div class="sb"><div class="tiles" id="tiles"></div></div>
+  </section>
+
+  <section style="--accent: #34d399">
+    <div class="sh">
+      <div><h2>實戰紀錄</h2><p id="trackSub">每天自動存下作戰清單，之後照建議價格與持有天數自動結算（已扣成本）。</p></div>
+      <span class="seg" id="trackSeg"></span>
+    </div>
+    <div class="sb">
+      <div class="tiles" id="trackTiles" style="grid-template-columns:repeat(5,minmax(0,1fr))"></div>
+      <div class="evwrap" style="max-height:380px;margin-top:12px"><table class="ev" id="trackTable"></table></div>
+    </div>
   </section>
 
   <section style="--accent: #f472b6">
@@ -227,6 +264,7 @@ ul.notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--t3); lin
   </section>
 </main>
 <div class="tip" id="tip"></div>
+<div class="kmodal" id="kmodal" hidden><div class="kbox"><div class="khead"><b id="ktitle"></b><button id="kclose" aria-label="關閉">✕</button></div><div id="kbody"></div><div class="legend" id="klegend"></div></div></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -265,14 +303,135 @@ function renderMeta() {
     + (nx ? `<span class="pill">下個交易日 <b class="num">${nx}</b></span>` : '')
     + `<span class="pill">樣本 <b class="num">${done.length}</b> 件（上市 ${done.filter((e) => e.mkt === '市').length}／上櫃 ${done.filter((e) => e.mkt === '櫃').length}）</span>`
     + `<span class="pill">已扣成本 <b class="num">${(D.cost * 100).toFixed(1)}%</b></span>`
+    + (D.market && D.market.today ? `<span class="pill">大盤 <b class="num">${D.market.today.c.toLocaleString()}</b> <span class="${D.market.today.above ? 'up' : 'down'}">${D.market.today.above ? '月線上' : '月線下'}</span></span>` : '')
     + `<span class="pill muted">更新 ${esc(D.generatedAt)}</span>`;
 }
+
+/* ---------------- 大盤狀態提醒 ---------------- */
+function renderMarket() {
+  const M = D.market && D.market.today;
+  if (!M) { $('#mktBanner').innerHTML = ''; return; }
+  const H = S.hold;
+  const w = (g, k) => { const s = stat(g, k, H); return s && s.n >= 8 ? `${pct(s.win)}（n=${s.n}）` : '樣本不足'; };
+  const cmp = (label, gUp, gDn, k) => `${label}${nameOf(k)}：月線上 <b>${w(gUp, k)}</b>、月線下 <b>${w(gDn, k)}</b>`;
+  const lines = [cmp('全部・', 'mkUp', 'mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'L10')];
+  $('#mktBanner').innerHTML = `<div class="banner ${M.above ? 'up' : 'dn'}">${M.above ? '✅' : '⚠️'} 大盤 ${md(M.date)} 收 <b>${M.c.toLocaleString()}</b>，${M.above ? '在' : '跌破'}月線（${M.ma20.toLocaleString()}）${M.above ? '' : '，處置股整體容易偏弱，部位放小'}。
+    <br><span style="font-size:12.5px">回測比較（處置公告時大盤位置，抱 ${H} 天勝率）：${lines.join('；')}</span></div>`;
+}
+
+/* ---------------- 實戰紀錄 ---------------- */
+S.trackKind = 'all';
+function renderTrack() {
+  const T = D.track || { rows: [] };
+  const nameK = (r) => (r.kind === 'pred' ? '公告日收盤（預判）' : r.kind === 'limit' ? `掛 ${px(r.limit)} 限價買` : nameOf(r.entry));
+  seg($('#trackSeg'), [['all', '全部'], ['A', 'A 級'], ['B', 'B 級'], ['P', '預判']], S.trackKind, (k) => { S.trackKind = k; renderTrack(); });
+  $('#trackSub').textContent = T.since ? `從 ${T.since} 開始記錄；照建議價格進場、抱 ${T.hold} 個交易日收盤出場（已扣成本）。持有中的用最新收盤估。` : '從下一次自動更新開始記錄。';
+  const done = T.rows.filter((r) => r.status === '已結算');
+  const tile = (label, rs, color) => {
+    const n = rs.length, win = n ? rs.filter((r) => r.ret > 0).length / n : null, avg = n ? rs.reduce((a, r) => a + r.ret, 0) / n : null;
+    return `<div class="tile" style="--c:${color}"><div class="l">${label}</div><div class="big2 num">${n ? pct(win) : '—'}</div><div class="s">已結算 ${n} 筆 · 平均 <span class="${cls(avg)}">${n ? sgn(avg) : '—'}</span></div></div>`;
+  };
+  const preds = T.rows.filter((r) => r.kind === 'pred' && r.status !== '待驗證');
+  $('#trackTiles').innerHTML = tile('A 級', done.filter((r) => r.grade === 'A'), 'var(--amber)') + tile('B 級', done.filter((r) => r.grade === 'B'), 'var(--sky)')
+    + tile('C／D 級', done.filter((r) => r.grade === 'C' || r.grade === 'D'), '#64748b') + tile('預判成真後', done.filter((r) => r.kind === 'pred'), '#a78bfa')
+    + `<div class="tile" style="--c:#f472b6"><div class="l">公告日預判命中</div><div class="big2 num">${preds.length ? pct(preds.filter((r) => r.hit).length / preds.length) : '—'}</div><div class="s">已驗證 ${preds.length} 檔</div></div>`;
+  const rows = T.rows.filter((r) => S.trackKind === 'all' || (S.trackKind === 'P' ? r.kind === 'pred' : r.grade === S.trackKind)).slice(0, 200);
+  let h = '<tr><th class="l">計畫日</th><th class="l">股票</th><th class="l">做法</th><th class="l">等級</th><th class="l">狀態</th><th class="l">進場</th><th>價格</th><th>報酬</th></tr>';
+  for (const r of rows) {
+    h += `<tr><td class="l num">${md(r.plan)}→${md(r.exec)}</td><td class="l">${starBtn(r.code)}<span class="num" style="color:var(--sky)">${r.code}</span> ${kLink(r.code, r.name)}</td>
+      <td class="l">${r.kind === 'short' ? '<span class="chip sh">空</span> ' : ''}${nameK(r)}</td><td class="l">${r.grade === 'P' ? '<span class="chip">預判</span>' : `<span class="g g${r.grade}">${r.grade}</span>`}</td>
+      <td class="l">${r.status}</td><td class="l num">${r.buy ? md(r.buy) : '—'}</td><td class="num">${r.px != null ? px(r.px) : '—'}</td>
+      <td class="num ${cls(r.ret)}">${r.ret != null ? sgn(r.ret) + (r.status === '持有中' ? '*' : '') : '—'}</td></tr>`;
+  }
+  $('#trackTable').innerHTML = rows.length ? h : '<tr><td class="empty">還沒有紀錄（下一次自動更新開始累積）</td></tr>';
+}
+
+/* ---------------- 我的追蹤 ---------------- */
+function renderWatch() {
+  const sec = $('#watchSec');
+  if (!WATCH.size) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const acts = buildActions();
+  const cards = [...WATCH].map((code) => {
+    const evs = D.events.filter((e) => e.code === code).sort((a, b) => b.start.localeCompare(a.start));
+    const e = evs[0];
+    const pc = D.predict && D.predict.ok ? D.predict.cands.find((c) => c.code === code) : null;
+    const name = e ? e.name : pc ? pc.name : code;
+    const my = acts.filter((a) => a.code === code);
+    const st = e ? (statusTxt(e) || '已出關超過 10 天') : '目前沒有處置紀錄';
+    return `<div class="tcard"><span class="code">${starBtn(code)}${code}</span><span class="nm">${kLink(code, name)}</span><span></span>
+      <div class="tags">${e ? mk(e.mkt) + kc(e.k) + `<span class="chip">${md(e.start)}~${md(e.end)}</span>` : ''}${shChip(code)}<span class="chip">${st}</span>${e && e.close ? `<span class="chip">收 ${px(e.close)}</span>` : ''}</div>
+      <div class="what">${pc ? `<span class="chip">預判</span> 明天再 1 次即處置（${esc(pc.rule)}）<br>` : ''}${my.length ? my.map((a) => `<span class="g g${grade(a.st && a.st.win, a.st ? a.st.n : 0)}" style="height:18px;font-size:11px">${grade(a.st && a.st.win, a.st ? a.st.n : 0)}</span> ${a.label}`).join('<br>') : '<span class="muted">明天沒有可執行的買點</span>'}</div></div>`;
+  });
+  $('#watch').innerHTML = cards.join('');
+}
+
+/* ---------------- K 線小圖 ---------------- */
+async function openK(code, name) {
+  const box = $('#kmodal'); box.hidden = false;
+  $('#ktitle').textContent = `${code} ${name}`;
+  $('#kbody').innerHTML = '<div class="empty">載入中…</div>'; $('#klegend').innerHTML = '';
+  let K;
+  try { K = await fetch(`k/${code}.json?t=${Date.now()}`).then((r) => { if (!r.ok) throw 0; return r.json(); }); }
+  catch (e) { $('#kbody').innerHTML = '<div class="empty">沒有這檔的 K 線資料（只有處置股與預判名單會產生；本機直接開檔案也看不到，要用網頁版）。</div>'; return; }
+  const bars = K.slice(-60), n = bars.length;
+  const evs = D.events.filter((e) => e.code === code);
+  const W = 860, Hp = 260, Hv = 60, pad = 40, cw = (W - pad - 8) / n;
+  const hi = Math.max(...bars.map((b) => b[2])), lo = Math.min(...bars.map((b) => b[3]));
+  const y = (p) => 10 + (hi - p) / (hi - lo || 1) * (Hp - 20);
+  const vmax = Math.max(1, ...bars.map((b) => b[5] || 0));
+  const xi = (i) => pad + i * cw + cw / 2;
+  const di = (d) => bars.findIndex((b) => b[0] >= d);
+  const lastEv = evs.slice().sort((a1, b1) => b1.start.localeCompare(a1.start))[0];
+  let g = '';
+  // 處置期間底色、公告日
+  for (const e of evs) {
+    const a = di(e.start), b0 = bars.findIndex((b) => b[0] > e.end), b = b0 < 0 ? n - 1 : b0 - 1;
+    if (a >= 0 && b >= a) g += `<rect x="${pad + a * cw}" y="0" width="${(b - a + 1) * cw}" height="${Hp + Hv + 10}" fill="${e.k === 2 ? 'rgba(251,113,133,.10)' : 'rgba(56,189,248,.10)'}"/>`;
+    const p = bars.findIndex((x) => x[0] === e.pub);
+    if (p >= 0) g += `<line x1="${xi(p)}" x2="${xi(p)}" y1="0" y2="${Hp}" stroke="#fbbf24" stroke-dasharray="3 3"/><text x="${xi(p) + 3}" y="12" fill="#fbbf24" font-size="11">公告</text>`;
+    if (e === lastEv && e.px0 && (e.status === 'pre' || (e.status || '').startsWith('d'))) {
+      [['−5%', 0.05, pad + 6, 'start'], ['−7%', 0.07, (pad + W) / 2, 'middle'], ['−10%', 0.10, W - 10, 'end']].forEach(([k, x, tx, an]) => { const P = tickFloor(e.px0 * (1 - x)); if (P > lo && P < hi) g += `<line x1="${pad}" x2="${W - 8}" y1="${y(P)}" y2="${y(P)}" stroke="#a78bfa" stroke-dasharray="2 4"/><text x="${tx}" y="${y(P) - 3}" fill="#c4b5fd" font-size="10" text-anchor="${an}" paint-order="stroke" stroke="#1e293b" stroke-width="3">低接${k} ${px(P)}</text>`; });
+    }
+  }
+  // 均線
+  const ma = (m) => bars.map((_, i) => { const all = K.slice(0, K.length - n + i + 1); if (all.length < m) return null; return all.slice(-m).reduce((a, b) => a + b[4], 0) / m; });
+  for (const [m, c] of [[5, '#fbbf24'], [20, '#a78bfa']]) { const pts = ma(m).map((v, i) => (v == null ? null : `${xi(i)},${y(v)}`)).filter(Boolean); g += `<polyline points="${pts.join(' ')}" fill="none" stroke="${c}" stroke-width="1.3" opacity=".8"/>`; }
+  // K 棒與量
+  bars.forEach((b, i) => {
+    const [d, o, h, l, c, v] = b, up = c >= o, col = up ? '#ef4444' : '#10b981';
+    g += `<line x1="${xi(i)}" x2="${xi(i)}" y1="${y(h)}" y2="${y(l)}" stroke="${col}"/><rect x="${xi(i) - cw * 0.35}" y="${y(Math.max(o, c))}" width="${cw * 0.7}" height="${Math.max(1, Math.abs(y(o) - y(c)))}" fill="${col}"><title>${d} 開${o} 高${h} 低${l} 收${c} 量${v ?? '—'}張</title></rect>`;
+    if (v) g += `<rect x="${xi(i) - cw * 0.35}" y="${Hp + 10 + Hv - v / vmax * Hv}" width="${cw * 0.7}" height="${v / vmax * Hv}" fill="${col}" opacity=".55"/>`;
+  });
+  for (const p of [hi, (hi + lo) / 2, lo]) g += `<text x="${pad - 4}" y="${y(p) + 4}" fill="#94a3b8" font-size="10" text-anchor="end">${px(p)}</text>`;
+  [0, Math.floor(n / 2), n - 1].forEach((i) => { g += `<text x="${xi(i)}" y="${Hp + Hv + 24}" fill="#94a3b8" font-size="10" text-anchor="middle">${md(bars[i][0])}</text>`; });
+  $('#kbody').innerHTML = `<svg viewBox="0 0 ${W} ${Hp + Hv + 30}">${g}</svg>`;
+  $('#klegend').innerHTML = '<span><i style="width:10px;height:10px;background:rgba(56,189,248,.35);display:inline-block"></i>第一次處置期間</span><span><i style="width:10px;height:10px;background:rgba(251,113,133,.35);display:inline-block"></i>第二次處置期間</span><span style="color:#fbbf24">┊ 公告日</span><span style="color:#fbbf24">— 5MA</span><span style="color:#a78bfa">— 20MA</span><span style="color:#c4b5fd">┄ 低接掛單價</span>';
+}
+document.addEventListener('click', (ev) => {
+  const st = ev.target.closest('[data-star]');
+  if (st) { const c = st.dataset.star; WATCH.has(c) ? WATCH.delete(c) : WATCH.add(c); saveWatch(); rerender(); ev.stopPropagation(); return; }
+  const k = ev.target.closest('[data-k]');
+  if (k) { openK(k.dataset.k, k.dataset.n); return; }
+  if (ev.target.id === 'kmodal' || ev.target.id === 'kclose') $('#kmodal').hidden = true;
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#kmodal').hidden = true; });
+function rerender() { renderWatch(); renderPlan(); renderTrack(); renderEvents(); }
 
 /* ---------------- 明天作戰清單 ---------------- */
 // 依股價分組：回測發現股價 ≥100 元的處置股勝率明顯較高
 const grpOf = (k, p0) => (k === 1 ? (p0 >= 100 ? 'k1p' : 'k1l') : (p0 >= 100 ? 'k2p' : 'k2l'));
 const grpName = (g) => ({ k1p: '第一次・≥100元', k1l: '第一次・<100元', k2p: '第二次・≥100元', k2l: '第二次・<100元' })[g] || g;
 const kindOf = (k) => (E[k] || {}).kind || 'close';
+const tickOf = (p) => (p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5);
+const tickFloor = (p) => Math.round(Math.floor(p / tickOf(p) + 1e-9) * tickOf(p) * 100) / 100;
+const tickCeil = (p) => Math.round(Math.ceil(p / tickOf(p) - 1e-9) * tickOf(p) * 100) / 100;
+// 追蹤清單（存在這台裝置的瀏覽器）
+let WATCH = new Set();
+try { WATCH = new Set(JSON.parse(localStorage.getItem('dbt.watch') || '[]')); } catch (e) {}
+const saveWatch = () => { try { localStorage.setItem('dbt.watch', JSON.stringify([...WATCH])); } catch (e) {} };
+const starBtn = (code) => `<button class="star-btn ${WATCH.has(code) ? 'on' : ''}" data-star="${code}" title="${WATCH.has(code) ? '取消追蹤' : '加入追蹤'}">${WATCH.has(code) ? '★' : '☆'}</button>`;
+const kLink = (code, name) => `<span class="kbtn" data-k="${code}" data-n="${esc(name)}" title="看 K 線">${esc(name)}</span>`;
 const mgOf = (code) => ((D.margin && D.margin.map) || {})[code];
 const shChip = (code) => { const m = mgOf(code); if (!m) return ''; return m[0] ? '<span class="chip ok" title="可融券放空">券</span>' : `<span class="chip no" title="${esc(m[1] || '')}">無券</span>`; };
 const minChip = (mn) => (mn && mn > 5 ? `<span class="chip slow" title="人工管制撮合，約每 ${mn} 分鐘撮合一次">${mn}分撮合</span>` : '');
@@ -284,10 +443,11 @@ function actionCard(o) {
   const isShort = kindOf(o.entry) === 'short';
   const noShort = isShort && mgOf(o.code) && !mgOf(o.code)[0];
   return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' || noShort ? 'weak' : ''} ${isShort ? 'short' : ''}">
-    <span class="code">${o.code}</span><span class="nm">${esc(o.name)}</span><span class="g g${g}">${g}</span>
+    <span class="code">${starBtn(o.code)}${o.code}</span><span class="nm">${kLink(o.code, o.name)}</span><span class="g g${g}">${g}</span>
     <div class="tags">${mk(o.mkt)}${kc(o.k)}<span class="chip ${o.p0 >= 100 ? 'hi' : 'lo'}">${o.p0 >= 100 ? '≥100元' : '<100元'}</span>${minChip(o.min)}${shChip(o.code)}${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
     <div class="what">${isBest ? '<span class="star">★ </span>' : ''}${isShort ? '<span class="chip sh">空</span> ' : ''}<b>${o.label}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
     <div class="stat">${st ? `<span>${isShort ? '做空' : ''}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>${isShort ? '反向' : '回檔'} <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}${st.n < D.minN ? '・<span style="color:#fcd34d">樣本少</span>' : ''}${o.statNote ? '・' + o.statNote : ''}</span>` : '<span class="muted">樣本不足</span>'}</div>
+    ${o.stopPx ? `<div class="stop">停損參考 <b class="num">${px(o.stopPx)}</b>（${isShort ? '漲過' : '跌破'}＝比 7 成回測案例還差，以${o.stopBase}估）</div>` : ''}
   </div>`;
 }
 
@@ -318,7 +478,7 @@ function predCard(c) {
   const hr = h && h.n ? h.hit / h.n : null;
   const hg = hr == null ? 'C' : hr >= 0.6 ? 'A' : hr >= 0.4 ? 'B' : 'D';
   return `<div class="tcard ${g === 'D' ? 'weak' : ''}">
-    <span class="code">${c.code}</span><span class="nm">${esc(c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
+    <span class="code">${starBtn(c.code)}${c.code}</span><span class="nm">${kLink(c.code, c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
     <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip ${c.close >= 100 ? 'hi' : 'lo'}">${c.close >= 100 ? '≥100元' : '<100元'}</span>${shChip(c.code)}<span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
     <div class="what"><span class="chip">預判</span> 公告日收盤買 · ${cond}</div>
     <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・抱${H}天勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
@@ -342,7 +502,7 @@ function buildActions() {
       if (kind === 'limit' && k !== (bestL && bestL.k)) continue;
       let st = stat(grp, k), label = esc(nameOf(k)), extra = bias, statNote = grpName(grp);
       if (kind === 'limit') {
-        const P = e.px0 * (1 - E[k].limit);
+        const P = tickFloor(e.px0 * (1 - E[k].limit));
         label = `掛 <span class="num">${px(P)}</span> 限價買（公告價−${Math.round(E[k].limit * 100)}%）`;
         extra = '處置期間有效，碰到才成交';
       }
@@ -356,7 +516,14 @@ function buildActions() {
         extra = !m ? '融券／借券；要有券、漲幅風險無上限' : m[0] ? '可融券；漲幅風險無上限，部位放小' : `<span style="color:#fca5a5">不可融券${m[1] && m[1] !== '非信用交易標的' ? `（${esc(m[1])}）` : ''}，只能借券或跳過</span>`;
       }
       if (e.min && e.min > 5) extra = (extra ? extra + ' · ' : '') + `<span style="color:#fdba74">約每 ${e.min} 分鐘撮合，掛單不一定成交</span>`;
-      acts.push({ ...base, entry: k, label, st, extra, statNote });
+      // 停損參考：3 成回測案例的最大回檔比這更深
+      let stopPx = null, stopBase = '';
+      if (st && st.dd30 != null) {
+        const basePx = kind === 'limit' ? tickFloor(e.px0 * (1 - E[k].limit)) : k === 'B' ? e.px0 : e.close;
+        stopBase = kind === 'limit' ? '掛單價' : k === 'B' ? '公告日收盤' : '今天收盤';
+        stopPx = kind === 'short' ? tickCeil(basePx * (1 - st.dd30)) : tickFloor(basePx * (1 + st.dd30));
+      }
+      acts.push({ ...base, entry: k, label, st, extra, statNote, stopPx, stopBase });
     }
   }
   const score = (a) => (a.st && a.st.n >= D.minN ? a.st.win : a.st && a.st.n >= 8 ? a.st.win - 0.05 : -1) + (a.entry === best(a.grp) ? 0.001 : 0);
@@ -504,7 +671,7 @@ function renderDays() {
 }
 
 /* ---------------- 逐筆事件 ---------------- */
-const inGroup = (e, g) => ({ all: true, k1: e.k === 1, k2: e.k === 2, hb: e.bias20 != null && e.bias20 > 0.25,
+const inGroup = (e, g) => (e.g ? e.g.includes(g) : g === 'all') || ({ all: true, k1: e.k === 1, k2: e.k === 2, hb: e.bias20 != null && e.bias20 > 0.25,
   lb: e.bias20 != null && e.bias20 <= 0.25, '市': e.mkt === '市', '櫃': e.mkt === '櫃' })[g];
 function renderEvents() {
   const sel = $('#selEntry');
@@ -517,7 +684,7 @@ function renderEvents() {
   let h = `<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th>乖離月線</th><th class="l">買進日</th>${D.holds.map((x) => `<th>${x} 天</th>`).join('')}</tr>`;
   for (const e of evs) {
     const r = e.r[k];
-    h += `<tr><td class="l"><span class="num" style="color:var(--sky)">${e.code}</span> ${esc(e.name)}</td><td class="l">${mk(e.mkt)}</td><td class="l">${kc(e.k)}</td>
+    h += `<tr><td class="l">${starBtn(e.code)}<span class="num" style="color:var(--sky)">${e.code}</span> ${kLink(e.code, e.name)}</td><td class="l">${mk(e.mkt)}</td><td class="l">${kc(e.k)}</td>
       <td class="l num">${md(e.start)}~${md(e.end)}</td><td class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</td>
       <td class="l num">${r ? md(r.d) : '<span class="muted">未觸發</span>'}</td>
       ${D.holds.map((x) => { const v = r && r[x]; const net = v ? v[0] - D.cost : null; return `<td class="num ${cls(net)}">${v ? sgn(net) : '<span class="muted">—</span>'}</td>`; }).join('')}</tr>`;
@@ -542,6 +709,12 @@ function renderNotes() {
     'D5收盤放空：處置第 5 天收盤融券／借券賣出，抱 N 天回補；勝率、報酬已換成做空的賺賠，「反向」＝持有期間最大反向漲幅。要有券可借、漲幅風險沒有上限，只適合小部位；不列入最佳買點。',
     '「券」＝可融券放空（證交所／櫃買信用交易資料，取最近一個交易日；暫停融券或非信用交易標的會標「無券」）。做空卡片遇到無券會變淡，只能改用借券或跳過。',
     '「N分撮合」＝處置改成人工管制、約每 N 分鐘撮合一次（多半是全額交割或變更交易方法的股票）。新制後大部分處置是 2 分鐘，10 分鐘以上的很少；策略總覽可切「2分鐘撮合／慢撮合≥10分」分組比較，慢撮合樣本很少，參考就好。',
+    '實戰紀錄：每天自動更新時，把當天的作戰清單（每檔每種做法一筆）存進 history.json；之後照卡片上的價格規則進場、抱 5 個交易日收盤出場自動結算。掛低接要在處置期間碰到價格才算成交。這是「照著做」的成績，跟回測分開看。',
+    '停損參考：同一組回測裡，3 成案例的持有期間最大回檔比這個價位更深；跌破代表這次比 7 成的歷史案例還差，可以當停損或減碼參考。',
+    '大盤狀態：用加權指數和 20 日均線（月線），以處置公告當天大盤在月線上或下分組回測，策略總覽可切「大盤在月線上／下」。',
+    '法人籌碼：處置前 3 個交易日外資＋投信買賣超合計（張），分「處置前法人買超／賣超」兩組回測。',
+    '量縮收斂→隔日開盤：處置期間某天成交量不到處置前 5 日均量的一半、振幅比前一天小、而且收紅，隔天開盤買。「處置期間量縮<5成」分組＝整段處置期間平均量不到處置前的一半。',
+    '點股票名稱可以看 K 線小圖（最近 60 天，標出處置期間、公告日、均線和低接掛單價）；點 ☆ 加入「我的追蹤」，追蹤清單只存在這台裝置的瀏覽器。',
     '加停損反而變差：處置期間撮合慢、價格跳動大，固定 7% 停損或移動停損都讓勝率下降，所以回測都用固定持有天數。',
     '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
     '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞。歷史回測不代表未來。',
@@ -551,7 +724,7 @@ function renderNotes() {
 function renderHold() {
   seg($('#segHold'), D.holds.map((h) => [h, `${h}天`]), S.hold, (k) => {
     S.hold = k; try { localStorage.setItem('dbt.hold', k); } catch (e) {}
-    renderHold(); renderPlan(); renderTiles(); renderHeat();
+    renderHold(); renderMarket(); renderWatch(); renderPlan(); renderTiles(); renderHeat();
   });
 }
 
@@ -562,7 +735,7 @@ function boot() {
     return;
   }
   E = Object.fromEntries(D.entries.map((e) => [e.key, e]));
-  renderMeta(); renderHold(); renderPlan(); renderTiles(); renderDays(); renderHeat(); renderEvents(); renderNotes();
+  renderMeta(); renderMarket(); renderHold(); renderWatch(); renderPlan(); renderTiles(); renderTrack(); renderDays(); renderHeat(); renderEvents(); renderNotes();
 }
 // 每次都抓最新的 data.js（避免瀏覽器快取舊資料）
 (() => {
