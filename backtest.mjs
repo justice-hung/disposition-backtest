@@ -27,6 +27,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const RULE_START = process.argv[2] && /^\d{4}-\d{2}-\d{2}$/.test(process.argv[2]) ? process.argv[2] : "2026-08-10";
 const COST = 0.006;            // 手續費買賣 0.1425%×2 + 證交稅 0.3%，取整 0.6%
 const HOLDS = [3, 5, 10, 20];
+const HOLDS_ALL = [...HOLDS, "X"]; // X＝放到出關：處置結束後第 1 個交易日開盤賣（出關後才進場的買點沒有這一欄）
 const MIN_N = 15;              // 「最佳買點」至少要有的樣本數
 
 const ENTRIES = [ // [key, 名稱, 說明, 盤後看得到訊號後還來得及做（列入最佳買點）]
@@ -324,6 +325,12 @@ function analyse(ev, bars, ctx = {}) {
         ? [r4(C[x] / px - 1), r4(Math.min(...seg.map((b) => b.l)) / px - 1)]
         : [r4(1 - C[x] / px), r4(1 - Math.max(...seg.map((b) => b.h)) / px)];
     }
+    if (idx <= e && e + 1 < bars.length) { // 放到出關首日開盤
+      const seg = bars.slice(open ? idx : idx + 1, e + 1), xp = bars[e + 1].o;
+      if (xp) o.X = dir > 0
+        ? [r4(xp / px - 1), r4(Math.min(px, ...seg.map((b) => b.l)) / px - 1)]
+        : [r4(1 - xp / px), r4(1 - Math.max(px, ...seg.map((b) => b.h)) / px)];
+    }
     r[k] = o;
   }
   // 明天可以執行的買點（資料是收盤後更新，所以只列「明天」來得及做的）
@@ -375,7 +382,7 @@ function aggregate(events) {
     stats[g] = {};
     for (const [k] of ENTRIES) {
       stats[g][k] = {};
-      for (const H of HOLDS) {
+      for (const H of HOLDS_ALL) {
         const rs = evs.map((e) => e.r[k]?.[H]).filter(Boolean);
         if (!rs.length) continue;
         const net = rs.map((x) => x[0] - COST).sort((a, b) => a - b);
@@ -847,7 +854,7 @@ function lab(events, barsOf) {
 
   // 2. 評分 0~3 對應的實際表現
   const score = {};
-  for (const H of HOLDS) score[H] = [0, 1, 2, 3].map((sc) => ({ s: sc,
+  for (const H of HOLDS_ALL) score[H] = [0, 1, 2, 3].map((sc) => ({ s: sc,
     k1B: sumStat(done.filter((e) => e.k === 1 && e.score === sc).map((e) => net(e, "B", H))),
     k2L: sumStat(done.filter((e) => e.k === 2 && e.score === sc).map((e) => net(e, "L7", H))) }));
 
@@ -991,11 +998,11 @@ async function main() {
     generatedAt: `${todayIso} ${pad(today.getHours())}:${pad(today.getMinutes())}`,
     asOf: lastDate,
     ruleStart: RULE_START,
-    cost: COST, holds: HOLDS, minN: MIN_N,
+    cost: COST, holds: HOLDS_ALL, minN: MIN_N,
     entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: limOf(key), d1: D1LIMITS[key] ? 1 : undefined, open: AT_OPEN[key] ? 1 : undefined })),
     groups: GROUPS.map(([key, name]) => ({ key, name })),
     stats,
-    best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),
+    best: Object.fromEntries(HOLDS_ALL.map((H) => [H, bestOf(stats, H)])),
     events: [...events, ...upcoming].map((e) => ({ ...e, g: GROUPS.filter(([, , f]) => f(e)).map(([k]) => k) })),
     predict,
     margin,

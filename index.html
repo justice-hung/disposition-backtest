@@ -194,11 +194,73 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .concl b { color: var(--t1); }
 #exitTable { min-width: 860px; } #monthTable { min-width: 480px; } #exitTable td.l { min-width: 190px; }
 .star i { font-style: normal; color: var(--t4); }
+.chip.sc i { font-style: normal; opacity: .35; }
 #eqChart svg { width: 100%; height: auto; display: block; }
 .eqleg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
 .eqleg > div { border-left: 3px solid var(--c); padding: 2px 0 2px 10px; font-size: 12px; color: var(--t3); line-height: 1.6; }
 .eqleg b { color: var(--t1); }
 @media (max-width: 860px) { .lab-grid { grid-template-columns: 1fr; } .eqleg { grid-template-columns: 1fr; } }
+.pgnav { position: sticky; top: 0; z-index: 15; display: flex; gap: 8px; padding: 10px 0; margin-bottom: 2px; background: linear-gradient(var(--bg) 75%, transparent); }
+.pgnav button { border: 1px solid var(--line); background: rgba(30,41,59,.9); color: var(--t3); font: inherit; font-weight: 700; font-size: 14px; padding: 8px 18px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.pgnav button[aria-pressed="true"] { background: rgba(56,189,248,.2); color: #e0f2fe; border-color: rgba(56,189,248,.6); }
+.pgnav button .cnt { display: inline-block; margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: 9px; background: rgba(251,191,36,.2); color: #fcd34d; font: 700 11px/18px var(--mono); }
+main[data-page="today"] [data-pg]:not([data-pg="today"]), main[data-page="track"] [data-pg]:not([data-pg="track"]),
+main[data-page="lab"] [data-pg]:not([data-pg="lab"]), main[data-page="stats"] [data-pg]:not([data-pg="stats"]) { display: none !important; }
+.today { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.today .tile .big2 { font-size: 26px; }
+.top3 { margin-top: 12px; background: var(--card); border: 1px solid rgba(51,65,85,.7); border-radius: 14px; padding: 6px 14px; }
+.top3 h3 { margin: 8px 0 4px; font-size: 13px; color: var(--t3); font-weight: 600; }
+.trow { display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line2); font-size: 14px; }
+.trow .nm { font-weight: 700; color: var(--t1); }
+.trow .what { color: var(--t2); min-width: 0; }
+.trow .win { font: 700 15px var(--mono); color: #fff; }
+.stocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 12px; align-items: start; }
+.scard { background: rgba(15,23,42,.55); border: 1px solid var(--line2); border-radius: 12px; padding: 12px; min-width: 0; }
+.scard.best { border-color: rgba(251,191,36,.55); background: linear-gradient(135deg, rgba(251,191,36,.09), rgba(15,23,42,.55) 55%); }
+.scard.weak { opacity: .62; }
+.sc-h { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.sc-h .code { font: 700 13px var(--mono); color: var(--sky); }
+.sc-h .nm { font-weight: 700; font-size: 16px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-meta { font-size: 12px; color: var(--t3); margin: 2px 0 6px; }
+.sc-plus { display: flex; flex-wrap: wrap; gap: 4px; }
+.sc-warn { margin-top: 6px; font-size: 12px; font-weight: 700; color: #fca5a5; background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.3); border-radius: 7px; padding: 3px 8px; }
+.sc-warn span { cursor: help; }
+.acts { margin-top: 8px; border-top: 1px solid var(--line2); padding-top: 4px; }
+.act > summary { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 7px 6px; border-radius: 8px; }
+.act > summary:hover { background: rgba(148,163,184,.08); }
+.act[open] > summary { background: rgba(56,189,248,.08); }
+.act.weak > summary { opacity: .6; }
+.when { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+.w-open { background: rgba(251,191,36,.15); color: #fcd34d; } .w-lim { background: rgba(167,139,250,.18); color: #c4b5fd; } .w-close { background: rgba(56,189,248,.15); color: #7dd3fc; }
+.albl { font-size: 13px; color: var(--t1); font-weight: 600; min-width: 0; }
+.awin { font: 700 14px var(--mono); color: #fff; }
+.actd { padding: 6px 8px 10px; font-size: 12.5px; color: var(--t3); line-height: 1.7; }
+.actd .stat { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.actd .stop b { color: #fca5a5; }
+.sc-more { margin-top: 6px; }
+.planbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.subh { margin: 20px 0 8px; font-size: 14.5px; font-weight: 700; color: var(--t1); }
+details.banner > summary { cursor: pointer; }
+details.banner > summary .hint { font-size: 12px; opacity: .7; margin-left: 8px; }
+details.banner ul { margin: 8px 0 2px; padding-left: 18px; font-size: 12.5px; }
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 10px; }
+.ccard { border-radius: 10px; padding: 10px 12px 10px 14px; background: rgba(15,23,42,.5); border: 1px solid var(--line2); border-left: 3px solid var(--c, var(--amber)); }
+.ccard .ct { font-size: 13.5px; font-weight: 700; color: var(--t1); }
+.ccard .cb { font: 900 26px var(--mono); color: var(--c, #fff); line-height: 1.25; }
+.ccard .cc { font-size: 11.5px; color: var(--t3); }
+.ccard .cx { font-size: 12px; color: var(--t3); margin-top: 6px; line-height: 1.6; }
+.ccard .cx b { color: var(--t1); }
+details.nouse { margin-top: 12px; }
+details.nouse > summary { font-size: 13px; color: var(--t3); padding: 6px 0; }
+details.nouse[open] > summary { color: var(--t1); }
+@media (max-width: 860px) { .today { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .pgnav { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 25; margin: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); background: #0f172af5; border-top: 1px solid var(--line); gap: 6px; }
+  .pgnav button { flex: 1; padding: 9px 2px; font-size: 12.5px; border-radius: 10px; }
+  .pgnav button .cnt { margin-left: 3px; }
+  main { padding-bottom: 96px; }
+  .trow { grid-template-columns: auto 1fr auto; } .trow .win { grid-column: 3; grid-row: 1; } .trow .what { grid-column: 1 / 4; grid-row: 2; font-size: 13px; }
+}
 .tip { position: fixed; z-index: 20; pointer-events: none; display: none; background: #0f172af2; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: var(--t2); box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: 260px; }
 .tip b { color: #fff; }
 
@@ -220,29 +282,36 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
     <div class="holdbox">持有天數 <span class="seg" id="segHold"></span></div>
   </header>
 
-  <div id="mktBanner"></div>
+  <nav class="pgnav" id="pgnav"></nav>
+  <div id="mktBanner" data-pg="today"></div>
+  <div id="todayBox" data-pg="today"></div>
 
-  <section style="--accent: #facc15" id="watchSec" hidden>
+  <section style="--accent: #facc15" id="watchSec" data-pg="today" hidden>
     <div class="sh"><div><h2>我的追蹤</h2><p>在卡片或表格點 ☆ 加入；只存在這台裝置的瀏覽器。</p></div></div>
     <div class="sb"><div class="watch" id="watch"></div></div>
   </section>
 
-  <section style="--accent: var(--amber)">
+  <section style="--accent: var(--amber)" data-pg="today">
     <div class="sh">
-      <div><h2 id="planTitle">明天作戰清單</h2><p>依回測勝率排序；★＝該處置次數回測最佳買點。資料收盤後更新，這裡只列明天來得及執行的。</p></div>
+      <div><h2 id="planTitle">明天作戰清單</h2><p>一檔一張卡，裡面依回測勝率列出明天可以做的方式；點任一列看細節。★＝該組回測最佳買點。</p></div>
       <div class="legend">
         <span><i class="g gA">A</i>勝率 ≥60%</span><span><i class="g gB">B</i>55–60%</span><span><i class="g gC">C</i>50–55%</span><span><i class="g gD">D</i>&lt;50% 避開</span>
       </div>
     </div>
-    <div class="sb"><div class="plan" id="plan"></div></div>
+    <div class="sb">
+      <div class="planbar"><span class="seg" id="planFilter"></span><button class="more" id="planD" style="width:auto;margin:0;padding:6px 12px"></button></div>
+      <div class="stocks" id="plan"></div>
+      <div id="planBad"></div>
+      <div id="predBox"></div>
+    </div>
   </section>
 
-  <section style="--accent: var(--sky)">
+  <section style="--accent: var(--sky)" data-pg="today">
     <div class="sh"><div><h2>目前最佳買點</h2><p id="bestSub"></p></div></div>
     <div class="sb"><div class="tiles" id="tiles"></div></div>
   </section>
 
-  <section style="--accent: #34d399">
+  <section style="--accent: #34d399" data-pg="track">
     <div class="sh">
       <div><h2>實戰紀錄</h2><p id="trackSub">每天自動存下作戰清單，之後照建議價格與持有天數自動結算（已扣成本）。</p></div>
       <span class="seg" id="trackSeg"></span>
@@ -253,10 +322,11 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
     </div>
   </section>
 
-  <section style="--accent: #a78bfa" id="labSec" hidden>
+  <section style="--accent: #a78bfa" id="labSec" data-pg="lab" hidden>
     <div class="sh"><div><h2>策略實驗室</h2><p>把想得到的做法都回測過一輪：有用的已經放進作戰清單，沒用的留結論在這裡，每天跟著新資料自動重算。</p></div></div>
     <div class="sb"><div class="lab-grid">
-      <div class="lab-box wide"><h3>研究結論</h3><ul class="concl" id="labConcl"></ul></div>
+      <div class="lab-box wide"><h3>研究結論</h3><p>大數字＝該做法抱 5 天的回測勝率（已扣成本）。黃色＝值得做、紅色＝要避開、藍色＝參考。</p><div class="cgrid" id="labCards"></div>
+        <details class="nouse"><summary><span class="caret">▶</span>測過但沒用的做法（<span id="noN"></span> 項）</summary><ul class="concl" id="labConcl"></ul></details></div>
       <div class="lab-box"><h3>評分表：分數越高越值得做</h3><p id="scoreSub"></p><div class="scroll"><table class="lt" id="scoreTable"></table></div></div>
       <div class="lab-box"><h3>各月份表現：行情好壞差很多</h3><p>依處置開始的月份分，抱 5 天勝率（下方＝平均報酬）。整個月都不到 5 成＝那段時間處置股整體偏弱，部位要縮。</p><div class="scroll"><table class="lt" id="monthTable"></table></div></div>
       <div class="lab-box wide"><h3>出場比較：什麼時候賣最好</h3><p>同一批進場，只換出場方式（已扣成本；金框＝該列勝率最高）。每種出場都算得出來的事件才列入，所以件數比上面少。</p><div class="scroll"><table class="lt" id="exitTable"></table></div></div>
@@ -264,7 +334,7 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
     </div></div>
   </section>
 
-  <section style="--accent: #f472b6">
+  <section style="--accent: #f472b6" data-pg="stats">
     <div class="sh">
       <div><h2>處置統計：每天怎麼走</h2><p>處前 2 天到出關後 3 天，每一天的平均表現；振幅越小＝價格越收斂。滑過看細節。</p></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
@@ -278,15 +348,15 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
     </div>
   </section>
 
-  <section style="--accent: #818cf8">
+  <section style="--accent: #818cf8" data-pg="lab">
     <div class="sh">
       <div><h2>策略總覽：買點 × 持有天數</h2><p>格子＝扣成本後勝率（下方小字＝報酬中位數）；顏色越亮勝率越高，金框＝該欄最佳；灰字＝樣本不足。滑過看細節。</p></div>
-      <div class="tabs" id="tabs"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><div class="tabs" id="tabs"></div><select id="selGroup" aria-label="分組"></select></div>
     </div>
     <div class="sb scroll"><table class="hm" id="hm"></table></div>
   </section>
 
-  <section style="--accent: #64748b">
+  <section style="--accent: #64748b" data-pg="lab">
     <details id="evDetails">
       <summary><div class="sh"><div><h2><span class="caret">▶</span>逐筆事件</h2><p>每件處置用指定買點的報酬（已扣成本），分組跟著上方策略總覽。</p></div></div></summary>
       <div class="sb">
@@ -296,7 +366,7 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
     </details>
   </section>
 
-  <section style="--accent: #64748b">
+  <section style="--accent: #64748b" data-pg="stats">
     <details>
       <summary><div class="sh"><div><h2><span class="caret">▶</span>回測方法與限制</h2></div></div></summary>
       <div class="sb"><ul class="notes" id="notes"></ul></div>
@@ -354,10 +424,9 @@ function renderMarket() {
   if (!M) { $('#mktBanner').innerHTML = ''; return; }
   const H = S.hold;
   const w = (g, k) => { const s = stat(g, k, H); return s && s.n >= 8 ? `${pct(s.win)}（n=${s.n}）` : '樣本不足'; };
-  const cmp = (label, gUp, gDn, k) => `${label}${nameOf(k)}：月線上 <b>${w(gUp, k)}</b>、月線下 <b>${w(gDn, k)}</b>`;
-  const lines = [cmp('全部・', 'mkUp', 'mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'L10')];
-  $('#mktBanner').innerHTML = `<div class="banner ${M.above ? 'up' : 'dn'}">${M.above ? '✅' : '⚠️'} 大盤 ${md(M.date)} 收 <b>${M.c.toLocaleString()}</b>，${M.above ? '在' : '跌破'}月線（${M.ma20.toLocaleString()}）${M.above ? '' : '，處置股整體容易偏弱，部位放小'}。
-    <br><span style="font-size:12.5px">回測比較（處置公告時大盤位置，${holdName(H)}勝率）：${lines.join('；')}</span></div>`;
+  const cmp = (label, gUp, gDn, k) => `<li>${label}${nameOf(k)}：月線上 <b>${w(gUp, k)}</b>、月線下 <b>${w(gDn, k)}</b></li>`;
+  $('#mktBanner').innerHTML = `<details class="banner ${M.above ? 'up' : 'dn'}"><summary>${M.above ? '🟢' : '🔴'} 大盤 ${md(M.date)} 收 <b>${M.c.toLocaleString()}</b>，${M.above ? '在月線上' : '跌破月線'}（${M.ma20.toLocaleString()}）${M.above ? '' : '——處置股整體容易偏弱，部位放小'}<span class="hint">回測比較 ▾</span></summary>
+    <ul>${cmp('全部・', 'mkUp', 'mkDn', 'B')}${cmp('第二次・', 'k2mkUp', 'k2mkDn', 'B')}${cmp('第二次・', 'k2mkUp', 'k2mkDn', 'L10')}</ul><div style="font-size:12px;opacity:.75">以處置公告當天大盤在月線上／下分組，${holdName(H)}勝率。</div></details>`;
 }
 
 /* ---------------- 實戰紀錄 ---------------- */
@@ -457,7 +526,7 @@ document.addEventListener('click', (ev) => {
   if (ev.target.id === 'kmodal' || ev.target.id === 'kclose') $('#kmodal').hidden = true;
 });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#kmodal').hidden = true; });
-function rerender() { renderWatch(); renderPlan(); renderTrack(); renderEvents(); }
+function rerender() { renderWatch(); renderToday(); renderPlan(); renderTrack(); renderEvents(); }
 
 /* ---------------- 明天作戰清單 ---------------- */
 // 依股價分組：回測發現股價 ≥100 元的處置股勝率明顯較高
@@ -486,18 +555,50 @@ const mgOf = (code) => ((D.margin && D.margin.map) || {})[code];
 const shChip = (code) => { const m = mgOf(code); if (!m) return ''; return m[0] ? '<span class="chip ok" title="可融券放空">券</span>' : `<span class="chip no" title="${esc(m[1] || '')}">無券</span>`; };
 const minChip = (mn) => (mn && mn > 5 ? `<span class="chip slow" title="人工管制撮合，約每 ${mn} 分鐘撮合一次">${mn}分撮合</span>` : '');
 
-function actionCard(o) {
-  const st = o.st;
-  const g = grade(st && st.win, st ? st.n : 0);
-  const isBest = o.entry === best(o.grp);
-  const isShort = kindOf(o.entry) === 'short';
-  const noShort = isShort && mgOf(o.code) && !mgOf(o.code)[0];
-  return `<div class="tcard ${isBest ? 'best' : ''} ${g === 'D' || noShort ? 'weak' : ''} ${isShort ? 'short' : ''}">
-    <span class="code">${starBtn(o.code)}${o.code}</span><span class="nm">${kLink(o.code, o.name)}</span><span class="g g${g}">${g}</span>
-    <div class="tags">${mk(o.mkt)}${kc(o.k)}<span class="chip ${o.p0 >= 100 ? 'hi' : 'lo'}">${o.p0 >= 100 ? '≥100元' : '<100元'}</span>${scoreChip(o)}${minChip(o.min)}${shChip(o.code)}${o.status ? `<span class="chip">${o.status}</span>` : ''}</div>
-    <div class="what">${isBest ? '<span class="star">★ </span>' : ''}${isShort ? '<span class="chip sh">空</span> ' : ''}<b>${o.label}</b>${o.extra ? ` · ${o.extra}` : ''}</div>
-    <div class="stat">${st ? `<span>${isShort ? '做空' : ''}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>${isShort ? '反向' : '回檔'} <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}${st.n < D.minN ? '・<span style="color:#fcd34d">樣本少</span>' : ''}${o.statNote ? '・' + o.statNote : ''}</span>` : '<span class="muted">樣本不足</span>'}</div>
-    ${o.stopPx ? `<div class="stop">停損參考 <b class="num">${px(o.stopPx)}</b>（${isShort ? '漲過' : '跌破'}＝比 7 成回測案例還差，以${o.stopBase}估）</div>` : ''}
+// 加分標籤（小圖示）與扣分警示（集中成一行）
+const plusChips = (o) => {
+  const m = mgOf(o.code);
+  return (o.score == null ? '' : `<span class="chip sc" title="${esc(((D.lab || {}).scoreNames || []).map((n, i) => (o.sf && o.sf[i] ? '✔ ' : '✘ ') + n).join('　'))}">評分 ${'★'.repeat(o.score)}<i>${'☆'.repeat(3 - o.score)}</i></span>`)
+    + (o.insti != null && o.insti <= -3 ? `<span class="chip hi" title="處置前 3 日法人賣超占成交量 ${Math.abs(o.insti)}%；回測反而是勝率最高的一組">法人大賣</span>` : '')
+    + (o.fut ? '<span class="chip fut" title="有股票期貨：可以用股期做多／放空或避險">期</span>' : '')
+    + (m && m[0] ? '<span class="chip ok" title="可融券放空">券</span>' : '');
+};
+const warnList = (o) => {
+  const g = o.g || [], m = mgOf(o.code), w = [];
+  if (g.includes('cold')) w.push(['冷門', '處置前 5 日均成交金額不到 1 億，回測勝率明顯最差']);
+  if (g.includes('surge')) w.push(['爆量', `處置前 5 日均量是更前 20 日的 ${o.vs} 倍；爆量 6 倍以上的回測勝率很差`]);
+  if (g.includes('noinst')) w.push(['無法人', '處置前 3 日法人買賣超不到成交量的 3%；評分低或第二次處置遇到這種，回測勝率很差']);
+  if (g.includes('k1lu4')) w.push(['飆股', `評分≤1，而且前 10 個交易日有 ${o.lu10} 次漲停；回測勝率很差`]);
+  if (o.min && o.min > 5) w.push([`${o.min}分撮合`, `人工管制撮合，約每 ${o.min} 分鐘撮合一次，掛單不一定成交`]);
+  return w;
+};
+const whenOf = (k) => (atOpen(k) ? 'open' : kindOf(k) === 'limit' ? 'limit' : 'close');
+const WHEN = { open: ['09:00 開盤', 'w-open'], limit: ['盤中掛單', 'w-lim'], close: ['13:30 收盤', 'w-close'] };
+const gradeA = (a) => grade(a.st && a.st.win, a.st ? a.st.n : 0);
+const groupByCode = (acts) => { const by = new Map(); for (const a of acts) { if (!by.has(a.code)) by.set(a.code, []); by.get(a.code).push(a); } return [...by.values()]; };
+
+function actRow(a, open) {
+  const st = a.st, g = gradeA(a), w = WHEN[whenOf(a.entry)];
+  const isShort = kindOf(a.entry) === 'short', noShort = isShort && mgOf(a.code) && !mgOf(a.code)[0];
+  return `<details class="act ${g === 'D' || noShort ? 'weak' : ''}" ${open ? 'open' : ''}>
+    <summary><span class="when ${w[1]}">${w[0]}</span><span class="albl">${a.entry === best(a.grp) ? '<span class="star">★ </span>' : ''}${isShort ? '<span class="chip sh">空</span> ' : ''}${a.label}</span><span class="awin">${st ? pct(st.win) : '—'}</span><i class="g g${g}">${g}</i></summary>
+    <div class="actd">${a.extra ? `<div>${a.extra}</div>` : ''}
+      <div class="stat">${st ? `<span>${isShort ? '做空' : ''}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span><span>${isShort ? '反向' : '回檔'} <b class="num down">${sgn(st.dd)}</b></span><span class="muted">n=${st.n}${st.n < D.minN ? '・<span style="color:#fcd34d">樣本少</span>' : ''}${a.statNote ? '・' + a.statNote : ''}</span>` : '<span class="muted">樣本不足</span>'}</div>
+      ${a.stopPx ? `<div class="stop">停損參考 <b class="num">${px(a.stopPx)}</b>（${isShort ? '漲過' : '跌破'}＝比 7 成回測案例還差，以${a.stopBase}估）</div>` : ''}
+    </div></details>`;
+}
+function stockCard(list, all) {
+  const o = list[0], topG = gradeA(o);
+  const good = list.filter((a) => gradeA(a) !== 'D'), bad = list.length - good.length;
+  const show = all || S.showD ? list : good;
+  const warns = warnList(o);
+  return `<div class="scard ${topG === 'A' ? 'best' : ''} ${good.length ? '' : 'weak'}">
+    <div class="sc-h"><span class="code">${starBtn(o.code)}${o.code}</span><span class="nm">${kLink(o.code, o.name)}</span><span class="g g${topG}" title="最好的做法的等級">${topG}</span></div>
+    <div class="sc-meta">${o.mkt === '市' ? '上市' : '上櫃'}・${o.k === 1 ? '第一次' : '第二次'}處置${o.status ? '・' + o.status : ''}${o.close ? `・收 <span class="num">${px(o.close)}</span>` : ''}</div>
+    <div class="sc-plus">${plusChips(o)}</div>
+    ${warns.length ? `<div class="sc-warn">⚠ ${warns.map(([t, tt]) => `<span title="${esc(tt)}">${t}</span>`).join('・')}</div>` : ''}
+    <div class="acts">${show.map((a, i) => actRow(a, i === 0 && !all)).join('')}</div>
+    ${!all && !S.showD && bad && good.length ? `<div class="sc-more muted" style="font-size:12px">另有 ${bad} 個 D 級做法（已收起）</div>` : ''}
   </div>`;
 }
 
@@ -543,7 +644,7 @@ function buildActions() {
     const nx = e.next || [];
     if (!nx.length) continue;
     const grp = grpOf(e.k, e.px0);
-    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e), min: e.min, score: e.score, sf: e.sf, amt: e.amt, fut: e.fut, vs: e.vs, g: e.g, lu10: e.lu10, insti: e.insti };
+    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e), min: e.min, score: e.score, sf: e.sf, amt: e.amt, fut: e.fut, vs: e.vs, g: e.g, lu10: e.lu10, insti: e.insti, close: e.close };
     const bias = e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '';
     // 掛低接：同一檔只列該組回測最好的一檔價位
     const lims = nx.filter((k) => kindOf(k) === 'limit' && !E[k].d1);
@@ -591,38 +692,68 @@ function buildActions() {
   return acts.sort((a, b) => score(b) - score(a));
 }
 
+S.planTime = 'all';
 function renderPlan() {
   const nx = D.predict && D.predict.next;
   $('#planTitle').textContent = nx ? `明天（${md(nx)}）作戰清單` : '明天作戰清單';
-  const acts = buildActions();
-  const open = acts.filter((a) => atOpen(a.entry));
-  const lim = acts.filter((a) => kindOf(a.entry) === 'limit');
-  const close = acts.filter((a) => ['close', 'short'].includes(kindOf(a.entry)) && !atOpen(a.entry));
+  let acts = buildActions();
+  const cnt = (t) => groupByCode(acts.filter((a) => whenOf(a.entry) === t && gradeA(a) !== 'D')).length;
+  seg($('#planFilter'), [['all', '全部'], ['open', `09:00 開盤 ${cnt('open')}`], ['limit', `盤中掛單 ${cnt('limit')}`], ['close', `13:30 收盤 ${cnt('close')}`]], S.planTime, (k) => { S.planTime = k; renderPlan(); });
+  if (S.planTime !== 'all') acts = acts.filter((a) => whenOf(a.entry) === S.planTime);
+  const groups = groupByCode(acts);
+  const good = groups.filter((l) => l.some((a) => gradeA(a) !== 'D')), bad = groups.filter((l) => !l.some((a) => gradeA(a) !== 'D'));
+  const nD = acts.filter((a) => gradeA(a) === 'D').length;
+  const btn = $('#planD'); btn.hidden = !nD; btn.textContent = S.showD ? '收起 D 級做法' : `顯示 D 級做法（${nD}）`; btn.onclick = () => { S.showD = !S.showD; renderPlan(); };
+  $('#plan').innerHTML = good.length ? good.map((l) => stockCard(l)).join('') : '<div class="empty">沒有 C 級以上的做法</div>';
+  $('#planBad').innerHTML = bad.length ? `<details ${S.showD ? 'open' : ''} style="margin-top:12px"><summary class="more" style="display:block;text-align:center">另有 ${bad.length} 檔只有 D 級做法（勝率 &lt;50%，建議避開）</summary><div class="stocks" style="margin-top:10px">${bad.map((l) => stockCard(l, true)).join('')}</div></details>` : '';
 
   const P = D.predict || {};
-  let predHtml;
-  if (!P.ok) predHtml = `<div class="empty">抓不到注意股資料，暫時無法預判公告日。</div>`;
-  else {
-    const cs = P.cands.slice().sort((a, b) => ({ always: 0, price: 1, other: 2 })[a.cat] - ({ always: 0, price: 1, other: 2 })[b.cat] || a.k - b.k);
-    predHtml = `<div class="warn">公告日預判：處置在收盤後才公告，用證交所／櫃買注意股公告自己算出「明天再 1 次即處置」的名單。13:20 左右確認價格落在達標範圍，再用尾盤買；命中率樣本還少，部位放小。</div>`
-      + (cs.length ? cs.map(predCard).join('') : '<div class="empty">明天沒有「再 1 次即處置」的股票</div>');
+  let predHtml = '';
+  if (S.planTime === 'all' || S.planTime === 'limit') {
+    if (!P.ok) predHtml = `<div class="subh">公告日預判</div><div class="empty">抓不到注意股資料，暫時無法預判公告日。</div>`;
+    else {
+      const cs = P.cands.slice().sort((a, b) => ({ always: 0, price: 1, other: 2 })[a.cat] - ({ always: 0, price: 1, other: 2 })[b.cat] || a.k - b.k);
+      predHtml = `<div class="subh">公告日預判（明天再 1 次即處置，${cs.length} 檔）</div><div class="warn">處置在收盤後才公告。13:20 左右確認價格落在達標範圍，再用尾盤買；命中率樣本還少，部位放小。</div>`
+        + (cs.length ? `<div class="stocks">${cs.map(predCard).join('')}</div>` : '<div class="empty">明天沒有「再 1 次即處置」的股票</div>');
+    }
   }
-  const col = (title, sub, body) => `<div class="col"><div class="colh"><b>${title}</b><span>${sub}</span></div>${body}</div>`;
-  const isD = (a) => grade(a.st && a.st.win, a.st ? a.st.n : 0) === 'D';
-  const list = (arr, emptyTxt = '沒有') => {
-    if (!arr.length) return `<div class="empty">${emptyTxt}</div>`;
-    const keep = S.showD ? arr : arr.filter((a) => !isD(a));
-    const hid = arr.length - keep.length;
-    return (keep.length ? keep.map(actionCard).join('') : '<div class="empty">只有 D 級（勝率 &lt;50%）的選項</div>')
-      + (hid ? `<button class="more" data-more>＋ 另有 ${hid} 筆 D 級（勝率 &lt;50%，建議避開）</button>` : '')
-      + (S.showD && arr.some(isD) ? '<button class="more" data-less>收起 D 級</button>' : '');
-  };
-  $('#plan').innerHTML =
-    col('09:00 開盤買・空', `${open.length} 筆`, list(open)) +
-    col('盤中掛單・預判', `${lim.length + (P.ok ? P.cands.length : 0)} 筆`, list(lim, '沒有可掛的低接單') + predHtml) +
-    col('13:30 收盤買・空', `${close.length} 筆`, list(close));
-  $('#plan').querySelectorAll('[data-more]').forEach((b) => (b.onclick = () => { S.showD = true; renderPlan(); }));
-  $('#plan').querySelectorAll('[data-less]').forEach((b) => (b.onclick = () => { S.showD = false; renderPlan(); }));
+  $('#predBox').innerHTML = predHtml;
+}
+
+/* ---------------- 今日重點 ---------------- */
+function renderToday() {
+  const groups = groupByCode(buildActions());
+  const bestG = (l) => gradeA(l[0]);
+  const nA = groups.filter((l) => bestG(l) === 'A').length, nB = groups.filter((l) => bestG(l) === 'B').length;
+  const M = D.market && D.market.today, P = D.predict || {};
+  const done = ((D.track || {}).rows || []).filter((r) => r.status === '已結算' && r.grade === 'A');
+  const tw = done.length ? done.filter((r) => r.ret > 0).length / done.length : null;
+  const tile = (c, l, v, sub) => `<div class="tile" style="--c:${c}"><div class="l">${l}</div><div class="big2 num">${v}</div><div class="s">${sub}</div></div>`;
+  const top = groups.filter((l) => ['A', 'B'].includes(bestG(l))).slice(0, 3);
+  $('#todayBox').innerHTML = `<div class="today">`
+    + tile('var(--amber)', '明天 A 級機會', `${nA} 檔`, `B 級 ${nB} 檔・共 ${groups.length} 檔有做法`)
+    + tile(M && !M.above ? '#f87171' : '#34d399', '大盤', M ? (M.above ? '月線上' : '月線下') : '—', M ? `${md(M.date)} 收 ${M.c.toLocaleString()}${M.above ? '' : '・部位放小'}` : '沒有資料')
+    + tile('#a78bfa', '公告日預判', P.ok ? `${P.cands.length} 檔` : '—', '明天再 1 次即處置')
+    + tile('#38bdf8', '實戰 A 級勝率', tw == null ? '—' : pct(tw), done.length ? `已結算 ${done.length} 筆` : '還在累積中')
+    + `</div>`
+    + (top.length ? `<div class="top3"><h3>最值得做的 ${top.length} 檔（${holdName(S.hold)}回測勝率）</h3>${top.map((l) => { const a = l[0], w = WHEN[whenOf(a.entry)], ws = warnList(a); return `<div class="trow"><i class="g g${gradeA(a)}">${gradeA(a)}</i><span><span class="num" style="color:var(--sky)">${a.code}</span> <span class="nm">${kLink(a.code, a.name)}</span></span><span class="what"><span class="when ${w[1]}">${w[0]}</span> ${kindOf(a.entry) === 'short' ? '<span class="chip sh">空</span> ' : ''}${a.label}${ws.length ? ` <span style="color:#fca5a5;font-size:12px">⚠ ${ws.map((x) => x[0]).join('・')}</span>` : ''}</span><span class="win">${a.st ? pct(a.st.win) : '—'}</span></div>`; }).join('')}</div>` : '');
+  const b = document.querySelector('#pgnav [data-go="today"] .cnt'); if (b) { b.textContent = nA; b.hidden = !nA; }
+}
+
+/* ---------------- 分頁 ---------------- */
+const PAGES = [['today', '今日作戰'], ['track', '實戰紀錄'], ['lab', '策略研究'], ['stats', '統計'] ];
+S.page = 'today';
+try { const h = location.hash.slice(1) || localStorage.getItem('dbt.page'); if (PAGES.some((p) => p[0] === h)) S.page = h; } catch (e) {}
+function setPage(p, scroll) {
+  S.page = p; document.querySelector('main').dataset.page = p;
+  document.querySelectorAll('#pgnav button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === p)));
+  try { localStorage.setItem('dbt.page', p); history.replaceState(null, '', '#' + p); } catch (e) {}
+  if (scroll) window.scrollTo(0, 0);
+}
+function renderNav() {
+  $('#pgnav').innerHTML = PAGES.map(([k, n]) => `<button data-go="${k}">${n}${k === 'today' ? '<span class="cnt" hidden></span>' : ''}</button>`).join('');
+  $('#pgnav').querySelectorAll('button').forEach((b) => (b.onclick = () => setPage(b.dataset.go, true)));
+  setPage(S.page);
 }
 
 /* ---------------- 最佳買點 ---------------- */
@@ -646,8 +777,31 @@ function cellBg(w) {
   if (d >= 0) return `rgba(${Math.round(56 + 195 * d)}, ${Math.round(189 + 2 * d)}, ${Math.round(248 - 212 * d)}, ${0.12 + 0.38 * d})`;
   return `rgba(100,116,139,${0.10 + 0.10 * -d})`;
 }
+const GROUP_CATS = [
+  ['處置次數', ['all', 'k1', 'k2']],
+  ['評分／股價', ['k1s2', 'k1s2g', 'k1s1', 'k1s2tw', 'k1p300', 'k1p', 'k1pg', 'k1l', 'k2p', 'k2l']],
+  ['籌碼', ['instBig', 'instIn', 'k1ib', 'k2ib', 'instBuy', 'instSell', 'sfY', 'sfN', 'k1sfY', 'volDry']],
+  ['市場／大盤', ['市', '櫃', 'k2tw', 'k2otc', 'mkUp', 'mkDn', 'k2mkUp', 'k2mkDn', 'fast', 'slow']],
+  ['處置前走勢／時間', ['hb', 'lb', 'k1r', 'k2pd', 'k1pv2', 'k1d12', 'k1d35']],
+  ['要避開的', ['cold', 'surge', 'noinst', 'k1lu4']],
+];
 function renderHeat() {
-  seg($('#tabs'), D.groups.map((g) => [g.key, g.name]), S.group, (k) => { S.group = k; renderHeat(); renderEvents(); });
+  const pick = (k) => { S.group = k; renderHeat(); renderEvents(); };
+  const gname = Object.fromEntries(D.groups.map((x) => [x.key, x.name]));
+  seg($('#tabs'), ['all', 'k1s2', 'k1s1', 'k2'].filter((k) => gname[k]).map((k) => [k, gname[k]]), S.group, pick);
+  const sel = $('#selGroup');
+  if (!sel.options.length) {
+    const used = new Set();
+    for (const [label, keys] of GROUP_CATS) {
+      const og = document.createElement('optgroup'); og.label = label;
+      for (const k of keys) if (gname[k]) { og.appendChild(new Option(gname[k], k)); used.add(k); }
+      if (og.children.length) sel.appendChild(og);
+    }
+    const rest = D.groups.filter((x) => !used.has(x.key));
+    if (rest.length) { const og = document.createElement('optgroup'); og.label = '其他'; rest.forEach((x) => og.appendChild(new Option(x.name, x.key))); sel.appendChild(og); }
+    sel.onchange = () => pick(sel.value);
+  }
+  sel.value = S.group;
   const g = S.group;
   const tops = {};
   for (const H of D.holds) tops[H] = (D.best[H] || {})[g] && D.best[H][g].entry;
@@ -680,28 +834,33 @@ function renderLab() {
   const cell = (s, best) => (!s ? '<td class="muted">—</td>' : `<td class="${best ? 'bestc' : ''}"><span class="w" style="${s.n < 8 ? 'color:var(--t3)' : ''}">${pct(s.win)}</span><span class="sub ${cls(s.mean)}">${sgn(s.mean)}・n=${s.n}</span></td>`);
   const w = (g, k, h = 5) => { const s = stat(g, k, h); return s ? `<b class="num">${pct(s.win)}</b>（n=${s.n}）` : '樣本不足'; };
 
-  // 結論
+  // 結論（卡片）
   const R = L.redisp || {};
   const ex = (L.exits || [])[0], exc = ex ? ex.cells : {};
   const exw = (r) => (exc[r] ? pct(exc[r].win) : '—');
-  const ok = [
-    `<b>評分選股</b>：股價≥100、日均成交≥5 億、月線乖離≤25%，各 1 分。第一次處置 D1 開盤買（抱 5 天）評分≥2 勝率 ${w('k1s2', 'B')}，評分≤1 只有 ${w('k1s1', 'B')}；再加「開盤漲幅≤3%」是 ${w('k1s2g', 'B')}。已套用到作戰清單的等級。`,
-    `<b>冷門股避開</b>：處置前日均成交不到 1 億的，D1 開盤買勝率 ${w('cold', 'B')}、掛低接−7% ${w('cold', 'L7')}，行情差的時候幾乎全賠。卡片會標紅色「冷門」。`,
-    ex ? `<b>出場：處置期間做完就走</b>。抱 5 天 ${exw('H5')}、處置最後一天收盤 ${exw('END')}、出關首日開盤 ${exw('X0')} 差不多；抱到 10 天掉到 ${exw('H10')}。「＋10% 先停利」勝率 ${exw('TP10H5')}，但平均報酬沒有比較高。` : '',
-    `<b>出關後不要追買</b>：出關首日開盤買抱 5 天勝率只有 ${w('all', 'X0')}。反過來「出關首日開盤放空」${w('all', 'SX')}、抱 10 天 ${w('all', 'SX', 10)}，已加進買點（要有券，而且跟行情多空關係很大，看月份表）。`,
-    `<b>處置前沒漲太多的比較好</b>：第一次處置、處置前 10 日漲幅 <30% 的 D1 開盤買 ${w('k1r', 'B')}，第一次全部是 ${w('k1', 'B')}。`,
-    `<b>第二次處置要等跌</b>：公告日當天跌 ≥3% 的 D1 開盤買 ${w('k2pd', 'B')}，第二次全部只有 ${w('k2', 'B')}；沒跌的用掛低接（−7% ${w('k2', 'L7')}、−10% ${w('k2', 'L10')}）。`,
-    (stat('k1s2', 'P2', 5) || {}).n ? `<b>D1 掛低一點等它來</b>：第一次處置、評分≥2，只在處置第 1 天掛「公告價−2%」，成交的勝率 ${w('k1s2', 'P2')}，直接開盤買是 ${w('k1s2', 'B')}；大約一半會買不到。已加進作戰清單的盤中掛單。` : '',
-    (stat('noinst', 'B', 5) || {}).n ? `<b>法人沒參與的避開，法人大賣的反而最好</b>：用處置前 3 日法人買賣超占成交量的比例看。評分≤1 或第二次處置、法人進出不到 3% 的，D1 開盤買只有 ${w('noinst', 'B')}。法人賣超 ≥3% 的反而最高：第一次 ${w('k1ib', 'B')}、第二次 ${w('k2ib', 'B')}（第二次全部只有 ${w('k2', 'B')}）。卡片會標「無法人」或「法人大賣」，等級跟著調整。` : '',
-    (stat('k1lu4', 'B', 5) || {}).n ? `<b>評分低的飆股避開</b>：第一次處置、評分≤1，而且前 10 個交易日漲停 4 次以上的，D1 開盤買只有 ${w('k1lu4', 'B')}，第一次・評分≤1 整體是 ${w('k1s1', 'B')}。卡片會標紅色「飆股」。` : '',
-    (stat('k1pv2', 'B', 5) || {}).n ? `<b>公告日當天爆量的比較差</b>：第一次處置、公告日成交量是前 5 日均量 2 倍以上的 ${w('k1pv2', 'B')}，第一次全部 ${w('k1', 'B')}。樣本還少，先放分組觀察、沒有放進等級。` : '',
-    (stat('surge', 'B', 5) || {}).n ? `<b>爆量股避開</b>：處置前 5 日均量是更前 20 日 6 倍以上的，D1 開盤買只有 ${w('surge', 'B')}。卡片會標紅色「爆量」。` : '',
-    D.stats.k1p300 ? `<b>行情差的時候，高價股和上市股撐得住</b>：第一次處置・股價≥300 的 D1 開盤買 ${w('k1p300', 'B')}；評分≥2 的上市股 ${w('k1s2tw', 'B')}；第二次處置掛低接−7% 上市 ${w('k2tw', 'L7')}、上櫃 ${w('k2otc', 'L7')}。` : '',
-    D.stats.k1d12 ? `<b>週一、週二開始處置的比較好</b>：第一次處置 D1 開盤買，週一二開始 ${w('k1d12', 'B')}，週三～五開始 ${w('k1d35', 'B')}（抱 5 天會跨週末）。樣本還少，先當參考、沒有放進等級。` : '',
-    D.stats.cold && stat('cold', 'SB', 5) ? `<b>最弱的族群反過來空</b>（僅回測）：D1 開盤放空抱 5 天，冷門股 ${w('cold', 'SB')}、第一次評分≤1 ${w('k1s1', 'SB')}、爆量股 ${w('surge', 'SB')}。但這些大多沒有券可借，而且行情好的時候只有 5 成，所以沒有放進作戰清單。` : '',
-    (stat('sfY', 'B', 5) || {}).n ? `<b>有股票期貨的比較穩，但沒有贏過評分</b>：第一次處置 D1 開盤買，有股期 ${w('k1sfY', 'B')}，第一次全部 ${w('k1', 'B')}；可是有股期的幾乎都是評分≥2 的大型股，跟評分≥2（${w('k1s2', 'B')}）差不多。放空要小心：有股期的 D5 收盤放空只有 ${w('sfY', 'S5')}，沒股期 ${w('sfN', 'S5')}。卡片標「期」＝可以用股期操作。` : '',
-    R.done ? `<b>累犯節奏</b>：已出關的 ${R.done} 件裡有 ${R.again} 件（${pct(R.again / R.done)}）又被處置：${R.seamless} 件無縫接軌（處置還沒結束就公告下一次）、${R.in10} 件在出關後 10 個交易日內、${R.later} 件更久之後。` : '',
-  ].filter(Boolean).map((t) => `<li class="ok">${t}</li>`);
+  const sv = (g, k, h = 5) => stat(g, k, h);
+  const C = { good: 'var(--amber)', bad: '#f87171', info: 'var(--sky)' };
+  const card = (type, title, s0, cap, body) => (s0 === null ? '' : `<div class="ccard" style="--c:${C[type]}"><div class="ct">${title}</div><div class="cb" ${s0.n && s0.n < 8 ? 'style="color:var(--t4)"' : ''}>${typeof s0 === 'string' ? s0 : pct(s0.win)}</div><div class="cc">${cap}${s0 && s0.n ? `・n=${s0.n}${s0.n < 8 ? '（樣本少）' : ''}` : ''}</div><div class="cx">${body}</div></div>`);
+  const need = (g, k) => sv(g, k) || null;
+  $('#labCards').innerHTML = [
+    card('good', '評分選股', need('k1s2', 'B'), '第一次・評分≥2・D1 開盤買', `股價≥100、日均成交≥5 億、月線乖離≤25% 各 1 分。評分≤1 只有 ${w('k1s1', 'B')}；再加開盤漲幅≤3% 是 ${w('k1s2g', 'B')}。`),
+    card('good', 'D1 掛低一點等它來', need('k1s2', 'P2'), '評分≥2・D1 掛公告價−2%', `直接開盤買是 ${w('k1s2', 'B')}；大約一半會買不到。`),
+    card('good', '法人大賣的反而最好', need('k2ib', 'B'), '第二次・法人賣超≥3%・D1 開盤買', `第二次全部只有 ${w('k2', 'B')}；第一次法人大賣 ${w('k1ib', 'B')}。`),
+    card('good', '第二次處置要等跌', need('k2pd', 'B'), '第二次・公告日跌≥3%・D1 開盤買', `沒跌的改掛低接：−7% ${w('k2', 'L7')}、−10% ${w('k2', 'L10')}。`),
+    card('good', '處置前沒漲太多', need('k1r', 'B'), '第一次・前 10 日漲幅<30%', `第一次全部是 ${w('k1', 'B')}。`),
+    card('good', '高價股、上市股撐得住', need('k1p300', 'B'), '第一次・股價≥300', `評分≥2 的上市股 ${w('k1s2tw', 'B')}；第二次掛低接−7% 上市 ${w('k2tw', 'L7')}、上櫃 ${w('k2otc', 'L7')}。`),
+    ex ? card('good', '處置期間做完就走', exc.H5 || null, '評分≥2＋開盤≤3%・抱 5 天', `處置最後一天收盤 ${exw('END')}、出關首日開盤 ${exw('X0')} 差不多；抱到 10 天掉到 ${exw('H10')}。` ) : '',
+    card('bad', '冷門股避開', need('cold', 'B'), '日均成交<1 億・D1 開盤買', `掛低接−7% 也只有 ${w('cold', 'L7')}，行情差時幾乎全賠。`),
+    card('bad', '沒有法人進出的避開', need('noinst', 'B'), '評分≤1 或第二次・法人進出<3%', '處置前 3 日外資＋投信買賣超占成交量不到 3%。'),
+    card('bad', '評分低的飆股避開', need('k1lu4', 'B'), '評分≤1＋10 日內漲停≥4 次', `第一次・評分≤1 整體是 ${w('k1s1', 'B')}。`),
+    card('bad', '爆量股避開', need('surge', 'B'), '前 5 日均量≥前 20 日 6 倍', '卡片會標「爆量」。'),
+    card('bad', '出關後不要追買', need('all', 'X0'), '出關首日開盤買', `反過來出關首日開盤放空 ${w('all', 'SX')}、抱 10 天 ${w('all', 'SX', 10)}（要有券，跟行情多空關係很大）。`),
+    card('info', '週一、週二開始處置', need('k1d12', 'B'), '第一次・週一二開始', `週三～五開始 ${w('k1d35', 'B')}（抱 5 天會跨週末）。樣本少，沒放進等級。`),
+    card('info', '公告日當天爆量', need('k1pv2', 'B'), '第一次・公告日量≥5 日均量 2 倍', `第一次全部 ${w('k1', 'B')}。樣本少，沒放進等級。`),
+    card('info', '有股票期貨', need('k1sfY', 'B'), '第一次・有股期', `跟評分≥2（${w('k1s2', 'B')}）差不多，沒有多出優勢；D5 收盤放空反而只有 ${w('sfY', 'S5')}。`),
+    card('info', '最弱的族群反過來空', need('cold', 'SB'), '冷門股・D1 開盤放空（僅回測）', `評分≤1 ${w('k1s1', 'SB')}、爆量股 ${w('surge', 'SB')}；多半沒券，行情好時只有 5 成，沒放進清單。`),
+    R.done ? card('info', '累犯節奏', pct(R.again / R.done), `已出關 ${R.done} 件裡又被處置的比例`, `${R.seamless} 件無縫接軌、${R.in10} 件在出關後 10 個交易日內、${R.later} 件更久之後。`) : '',
+  ].join('');
   const no = [
     '移動停利、收盤破 5 日線才賣、從高點回落 8% 才賣：勝率都比固定抱 5 天低（見下方出場比較），沒有採用。',
     '用處置第 1 天的漲跌或紅黑 K 決定第 2 天要不要買：各區間勝率忽高忽低，沒有規律。',
@@ -722,7 +881,8 @@ function renderLab() {
     '融資 5 日增減、融資使用率、券資比（上市樣本）：分組後勝率沒有穩定差異，沒有加入。',
     LAB_NO_EXTRA,
   ].filter(Boolean).map((t) => `<li class="no">${t}</li>`);
-  $('#labConcl').innerHTML = ok.join('') + no.join('');
+  $('#labConcl').innerHTML = no.join('');
+  $('#noN').textContent = no.length;
 
   // 評分表
   $('#scoreSub').innerHTML = `${(L.scoreNames || []).join('、')}，各 1 分，公告當晚就知道。${holdName(H)}勝率（下方＝平均報酬）。`;
@@ -890,7 +1050,7 @@ function renderNotes() {
 function renderHold() {
   seg($('#segHold'), D.holds.map((h) => [h, h === 'X' ? '到出關' : `${h}天`]), S.hold, (k) => {
     S.hold = k; try { localStorage.setItem('dbt.hold', k); } catch (e) {}
-    renderHold(); renderMarket(); renderWatch(); renderPlan(); renderTiles(); renderLab(); renderHeat();
+    renderHold(); renderMarket(); renderToday(); renderWatch(); renderPlan(); renderTiles(); renderLab(); renderHeat();
   });
 }
 
@@ -903,7 +1063,7 @@ function boot() {
   E = Object.fromEntries(D.entries.map((e) => [e.key, e]));
   if (D.stats.k1s2) S.group = 'k1s2';
   if (!D.holds.includes(S.hold)) S.hold = 5;
-  renderMeta(); renderMarket(); renderHold(); renderWatch(); renderPlan(); renderTiles(); renderTrack(); renderLab(); renderDays(); renderHeat(); renderEvents(); renderNotes();
+  renderNav(); renderMeta(); renderMarket(); renderToday(); renderHold(); renderWatch(); renderPlan(); renderTiles(); renderTrack(); renderLab(); renderDays(); renderHeat(); renderEvents(); renderNotes();
 }
 // 每次都抓最新的 data.js（避免瀏覽器快取舊資料）
 (() => {
