@@ -44,15 +44,19 @@ const ENTRIES = [ // [key, 名稱, 說明, 盤後看得到訊號後還來得及�
   ["M5", "破5日線→隔日開盤", "處置開始後首次收盤 < 5MA（觀察到出關後 10 天），隔天開盤買", true],
   ["M10", "破10日線→隔日開盤", "處置開始後首次收盤 < 10MA，隔天開盤買", true],
   ["M20", "破月線→隔日開盤", "處置開始後首次收盤 < 20MA，隔天開盤買", true],
+  ["P2", "D1掛公告價−2%", "只在處置第 1 天掛限價買單在『公告日收盤×0.98』，等它開低或盤中拉回才買（開盤就更低則以開盤價成交）；當天沒碰到就不買", true],
   ["L5", "掛低接−5%", "處置期間掛限價買單在『公告日收盤×0.95』，盤中碰到就成交（開盤就更低則以開盤價成交）", true],
   ["L7", "掛低接−7%", "處置期間掛限價買單在『公告日收盤×0.93』，盤中碰到就成交", true],
   ["L10", "掛低接−10%", "處置期間掛限價買單在『公告日收盤×0.90』，盤中碰到就成交", true],
   ["VC", "量縮收斂→隔日開盤", "處置期間某天成交量 < 處置前 5 日均量的一半、振幅比前一天小、而且收紅（收盤 > 前一天），隔天開盤買", true],
   ["SX", "出關首日開盤放空", "處置結束後第 1 個交易日開盤融券／借券賣出，抱 N 天回補（出關後追買的回測勝率都不到 5 成，反過來做空；要有券、漲幅風險無上限）", true],
+  ["SB", "D1開盤放空（僅回測）", "處置第 1 天開盤融券／借券賣出，抱 N 天回補。只用來對照「最弱的族群反過來空」的結果，不會出現在作戰清單", true],
   ["S5", "D5收盤放空", "處置第 5 天收盤融券／借券賣出，抱 N 天回補（報酬已換算成做空的賺賠；回檔＝持有期間最大反向漲幅）", true],
 ];
-const KIND = { VC: "open", B: "open", X0: "open", F: "open", M5: "open", M10: "open", M20: "open", L5: "limit", L7: "limit", L10: "limit", S5: "short", SX: "short" }; // 其餘為收盤買
-const AT_OPEN = { SX: true }; // 做空但在開盤進場
+const KIND = { VC: "open", B: "open", X0: "open", F: "open", M5: "open", M10: "open", M20: "open", L5: "limit", L7: "limit", L10: "limit", P2: "limit", S5: "short", SX: "short", SB: "short" }; // 其餘為收盤買
+const AT_OPEN = { SX: true, SB: true };
+const D1LIMITS = { P2: 0.02 }; // 只掛處置第 1 天的限價單
+const limOf = (k) => LIMITS[k] ?? D1LIMITS[k]; // 做空但在開盤進場
 const LIMITS = { L5: 0.05, L7: 0.07, L10: 0.10 };
 const GROUPS = [
   ["all", "全部", () => true],
@@ -84,6 +88,13 @@ const GROUPS = [
   ["sfY", "有股票期貨", (e) => e.fut === 1],
   ["sfN", "沒有股票期貨", (e) => e.fut === 0],
   ["k1sfY", "第一次・有股票期貨", (e) => e.k === 1 && e.fut === 1],
+  ["surge", "爆量（前5日均量≥前20日6倍）", (e) => e.vs != null && e.vs >= 6],
+  ["k1p300", "第一次・股價≥300", (e) => e.k === 1 && e.px0 >= 300],
+  ["k1d12", "第一次・週一二開始", (e) => e.k === 1 && e.dow != null && e.dow <= 2],
+  ["k1d35", "第一次・週三～五開始", (e) => e.k === 1 && e.dow != null && e.dow >= 3],
+  ["k1s2tw", "第一次・評分≥2・上市", (e) => e.k === 1 && e.score != null && e.score >= 2 && e.mkt === "市"],
+  ["k2tw", "第二次・上市", (e) => e.k === 2 && e.mkt === "市"],
+  ["k2otc", "第二次・上櫃", (e) => e.k === 2 && e.mkt === "櫃"],
   ["k2pd", "第二次・公告日跌≥3%", (e) => e.k === 2 && e.pubchg != null && e.pubchg <= -0.03],
 ];
 // 評分（0~3）：股價≥100、處置前 5 日均成交金額≥5 億、月線乖離≤25%，各 1 分（公告當晚就知道）
@@ -94,7 +105,10 @@ function preFeatures(bars, p) {
   const m20 = sma(bars.map((b) => b.c), 20, p);
   const preV = bars.slice(Math.max(0, p - 4), p + 1).map((b) => b.v).filter((v) => v != null);
   const preAvg = preV.length ? preV.reduce((a, b) => a + b, 0) / preV.length : null;
+  const v20 = bars.slice(Math.max(0, p - 24), Math.max(0, p - 4)).map((b) => b.v).filter((v) => v != null);
+  const avg20 = v20.length >= 10 ? v20.reduce((a, b) => a + b, 0) / v20.length : null;
   const f = {
+    vs: preAvg && avg20 > 0 ? Math.round(preAvg / avg20 * 10) / 10 : null, // 量增倍數：處置前 5 日均量 ÷ 更前 20 日均量
     px0: C(p), bias20: m20 ? r4(C(p) / m20 - 1) : null,
     run10: p >= 10 ? r4(C(p) / C(p - 10) - 1) : null,
     pubchg: p >= 1 ? r4(C(p) / C(p - 1) - 1) : null,
@@ -275,6 +289,8 @@ function analyse(ev, bars, ctx = {}) {
   }
   if (s + 4 <= e) ent.S5 = [s + 4, 0, null, -1];
   ent.SX = [e + 1, 1, null, -1];
+  ent.SB = [s, 1, null, -1];
+  for (const [k, x] of Object.entries(D1LIMITS)) if (bars[s].l <= P0 * (1 - x)) ent[k] = [s, 1, Math.min(P0 * (1 - x), bars[s].o)];
   // 量縮收斂往上：成交量 < 處置前 5 日均量一半、振幅縮小、收紅
   const preV = bars.slice(Math.max(0, s - 5), s).map((b) => b.v).filter((v) => v != null);
   const preAvg = preV.length ? preV.reduce((a, b) => a + b, 0) / preV.length : null;
@@ -305,7 +321,7 @@ function analyse(ev, bars, ctx = {}) {
   const i = bars.length - 1, next = [];
   const eEnd = D[i] < ev.end ? Infinity : e; // 處置還沒結束（迄日在資料之後）
   if (i < s - 1) { /* 尚未公告到處置 */ }
-  else if (i === s - 1) next.push("B", "D1");                 // 今天公告，明天處置第 1 天
+  else if (i === s - 1) next.push("B", "P2", "D1");                 // 今天公告，明天處置第 1 天
   else if (i < eEnd) { if (i - s + 2 <= 5) next.push(`D${i - s + 2}`); }             // 處置中，明天第 k+1 天收盤
   else if (i === eEnd) next.push("X0", "X1", "SX");                  // 今天處置最後一天，明天出關
   if (i === e + 2) next.push("X3");
@@ -328,7 +344,7 @@ function analyse(ev, bars, ctx = {}) {
   return {
     code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null,
     bias20: pf.bias20, px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
-    run10: pf.run10, pubchg: pf.pubchg, amt: pf.amt, score: pf.score, sf: pf.sf,
+    run10: pf.run10, pubchg: pf.pubchg, amt: pf.amt, score: pf.score, sf: pf.sf, vs: pf.vs, dow: new Date(`${ev.start}T12:00:00`).getDay(),
     volRatio, mk20: mk ? mk.above : null, inst3, preVol: pf.preVol, fut: ctx.futures ? (ctx.futures.has(ev.code) ? 1 : 0) : null,
     status: i < s ? "pre" : i <= eEnd ? `d${i - s + 1}` : i <= e + 10 ? "post" : "done",
     close: C[i], next, r,
@@ -658,6 +674,7 @@ function planStat(st, e, k, grp) {
     const x = st(g, "B");
     if (x && x.n >= 8) { s = x; note = g; }
   }
+  if (e.vs != null && e.vs >= 6 && KIND[k] !== "short") { const x = st("surge", k); if (x && x.n >= 8) { s = x; note = "surge"; } }
   if (e.amt != null && e.amt < 1 && KIND[k] !== "short") { const x = st("cold", k); if (x && x.n >= 8) { s = x; note = "cold"; } }
   return { st: s, note };
 }
@@ -668,18 +685,18 @@ function planItems(events, stats) {
     const grp = e.k === 1 ? (e.px0 >= 100 ? "k1p" : "k1l") : (e.px0 >= 100 ? "k2p" : "k2l");
     // 掛低接：同一檔只留該組回測勝率最高的價位（跟網頁卡片一致）
     let bestL = null;
-    for (const k of (e.next || []).filter((k) => KIND[k] === "limit")) { const s0 = st(grp, k); const w = s0 && s0.n >= 8 ? s0.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
+    for (const k of (e.next || []).filter((k) => KIND[k] === "limit" && !D1LIMITS[k])) { const s0 = st(grp, k); const w = s0 && s0.n >= 8 ? s0.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
     for (const k of e.next || []) {
-      if (KIND[k] === "limit" && k !== (bestL && bestL.k)) continue;
+      if (KIND[k] === "limit" && !D1LIMITS[k] && k !== (bestL && bestL.k)) continue;
       const s = planStat(st, e, k, grp).st;
       items.push({ code: e.code, name: e.name, mkt: e.mkt, k: e.k, entry: k, kind: KIND[k] || "close", grade: gradeOf(s && s.win, s ? s.n : 0),
-        win: s ? s.win : null, px0: e.px0, limit: LIMITS[k] ? tickFloor(e.px0 * (1 - LIMITS[k])) : null, end: e.end });
+        win: s ? s.win : null, px0: e.px0, limit: limOf(k) ? tickFloor(e.px0 * (1 - limOf(k))) : null, end: e.end });
     }
   }
   // 同一檔同一種掛單只留一個（最高等級）
   const seen = new Set();
   return items.sort((a, b) => "ABCD".indexOf(a.grade) - "ABCD".indexOf(b.grade))
-    .filter((x) => { const key = `${x.code}|${x.kind === "limit" ? "L" : x.entry}`; if (seen.has(key)) return false; seen.add(key); return true; });
+    .filter((x) => { const key = `${x.code}|${x.kind === "limit" && !D1LIMITS[x.entry] ? "L" : x.entry}`; if (seen.has(key)) return false; seen.add(key); return true; });
 }
 function settle(it, plan, bars) {
   const D = bars.map((b) => b.d), C = bars.map((b) => b.c);
@@ -688,8 +705,8 @@ function settle(it, plan, bars) {
   let idx = n, px, open = it.kind === "open" || it.kind === "limit" || !!AT_OPEN[it.entry], dir = it.kind === "short" ? -1 : 1;
   if (it.kind === "limit") {
     idx = -1;
-    for (let j = n; j < bars.length && D[j] <= it.end; j++) if (bars[j].l <= it.limit) { idx = j; px = Math.min(it.limit, bars[j].o); break; }
-    if (idx < 0) return { status: D[D.length - 1] >= it.end ? "未成交" : "掛單中" };
+    for (let j = n; j < bars.length && D[j] <= it.end && (!D1LIMITS[it.entry] || j === n); j++) if (bars[j].l <= it.limit) { idx = j; px = Math.min(it.limit, bars[j].o); break; }
+    if (idx < 0) return { status: D[D.length - 1] >= it.end || D1LIMITS[it.entry] ? "未成交" : "掛單中" };
   } else px = open ? bars[n].o : bars[n].c;
   if (!px) return { status: "沒交易" };
   const x = open ? idx + TRACK_HOLD - 1 : idx + TRACK_HOLD;
@@ -931,8 +948,8 @@ async function main() {
     const a = bars.length ? analyse(ev, bars, ctx) : null;
     if (a) events.push(a);
     else if (bars.length && ev.start > bars[bars.length - 1].d) {
-      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, status: "pre", close: bars[bars.length - 1].c, gap: null, fut: futures ? (futures.has(ev.code) ? 1 : 0) : null, next: ["B", "D1", "L5", "L7", "L10"], r: {},
-        ...(({ px0, bias20, run10, pubchg, amt, score, sf, preVol }) => ({ px0, bias20, run10, pubchg, amt, score, sf, preVol }))(preFeatures(bars, bars.length - 1)) });
+      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, status: "pre", close: bars[bars.length - 1].c, gap: null, fut: futures ? (futures.has(ev.code) ? 1 : 0) : null, next: ["B", "P2", "D1", "L5", "L7", "L10"], r: {}, dow: new Date(`${ev.start}T12:00:00`).getDay(),
+        ...(({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs }) => ({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs }))(preFeatures(bars, bars.length - 1)) });
     }
   }
   const stats = aggregate(events);
@@ -958,7 +975,7 @@ async function main() {
     asOf: lastDate,
     ruleStart: RULE_START,
     cost: COST, holds: HOLDS, minN: MIN_N,
-    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: LIMITS[key], open: AT_OPEN[key] ? 1 : undefined })),
+    entries: ENTRIES.map(([key, name, desc, real]) => ({ key, name, desc, real, kind: KIND[key] || "close", limit: limOf(key), d1: D1LIMITS[key] ? 1 : undefined, open: AT_OPEN[key] ? 1 : undefined })),
     groups: GROUPS.map(([key, name]) => ({ key, name })),
     stats,
     best: Object.fromEntries(HOLDS.map((H) => [H, bestOf(stats, H)])),
