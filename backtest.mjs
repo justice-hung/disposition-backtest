@@ -95,6 +95,13 @@ const GROUPS = [
   ["k1s2tw", "第一次・評分≥2・上市", (e) => e.k === 1 && e.score != null && e.score >= 2 && e.mkt === "市"],
   ["k2tw", "第二次・上市", (e) => e.k === 2 && e.mkt === "市"],
   ["k2otc", "第二次・上櫃", (e) => e.k === 2 && e.mkt === "櫃"],
+  ["instBig", "處置前法人大賣（≥3%量）", (e) => e.insti != null && e.insti <= -3],
+  ["instIn", "處置前法人大買（≥3%量）", (e) => e.insti != null && e.insti >= 3],
+  ["k1ib", "第一次・法人大賣", (e) => e.k === 1 && e.insti != null && e.insti <= -3],
+  ["k2ib", "第二次・法人大賣", (e) => e.k === 2 && e.insti != null && e.insti <= -3],
+  ["noinst", "法人沒參與（評分≤1 或第二次）", (e) => e.insti != null && Math.abs(e.insti) < 3 && (e.k === 2 || (e.score != null && e.score <= 1))],
+  ["k1lu4", "第一次・評分≤1＋10日內漲停≥4次", (e) => e.k === 1 && e.score != null && e.score <= 1 && e.lu10 != null && e.lu10 >= 4],
+  ["k1pv2", "第一次・公告日量≥2倍", (e) => e.k === 1 && e.pv != null && e.pv >= 2],
   ["k2pd", "第二次・公告日跌≥3%", (e) => e.k === 2 && e.pubchg != null && e.pubchg <= -0.03],
 ];
 // 評分（0~3）：股價≥100、處置前 5 日均成交金額≥5 億、月線乖離≤25%，各 1 分（公告當晚就知道）
@@ -108,6 +115,8 @@ function preFeatures(bars, p) {
   const v20 = bars.slice(Math.max(0, p - 24), Math.max(0, p - 4)).map((b) => b.v).filter((v) => v != null);
   const avg20 = v20.length >= 10 ? v20.reduce((a, b) => a + b, 0) / v20.length : null;
   const f = {
+    lu10: p >= 10 ? [...Array(10).keys()].filter((k) => C(p - k) / C(p - k - 1) - 1 >= 0.095).length : null, // 前 10 日漲停次數
+    pv: (() => { const a = bars.slice(Math.max(0, p - 5), p).map((b) => b.v).filter((v) => v != null); const m = a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; return m > 0 && bars[p].v != null ? Math.round(bars[p].v / m * 10) / 10 : null; })(), // 公告日量 ÷ 前 5 日均量
     vs: preAvg && avg20 > 0 ? Math.round(preAvg / avg20 * 10) / 10 : null, // 量增倍數：處置前 5 日均量 ÷ 更前 20 日均量
     px0: C(p), bias20: m20 ? r4(C(p) / m20 - 1) : null,
     run10: p >= 10 ? r4(C(p) / C(p - 10) - 1) : null,
@@ -344,7 +353,9 @@ function analyse(ev, bars, ctx = {}) {
   return {
     code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null,
     bias20: pf.bias20, px0: P0, gap: bars[s] ? r4(bars[s].o / P0 - 1) : null,
-    run10: pf.run10, pubchg: pf.pubchg, amt: pf.amt, score: pf.score, sf: pf.sf, vs: pf.vs, dow: new Date(`${ev.start}T12:00:00`).getDay(),
+    run10: pf.run10, pubchg: pf.pubchg, amt: pf.amt, score: pf.score, sf: pf.sf, vs: pf.vs, lu10: pf.lu10, pv: pf.pv,
+    insti: inst3 != null && pf.preVol ? Math.round(inst3 / (pf.preVol * 3) * 1000) / 10 : null, // 法人買賣超強度：處置前 3 日合計 ÷ 3 日均量（%）
+    dow: new Date(`${ev.start}T12:00:00`).getDay(),
     volRatio, mk20: mk ? mk.above : null, inst3, preVol: pf.preVol, fut: ctx.futures ? (ctx.futures.has(ev.code) ? 1 : 0) : null,
     status: i < s ? "pre" : i <= eEnd ? `d${i - s + 1}` : i <= e + 10 ? "post" : "done",
     close: C[i], next, r,
@@ -666,6 +677,7 @@ const TRACK_HOLD = 5;
 const tickFloor = (p) => { const t = tick(p); return Math.round(Math.floor(p / t + 1e-9) * t * 100) / 100; };
 const gradeOf = (w, n) => (w == null || n < 8 ? "C" : w >= 0.6 ? "A" : w >= 0.55 ? "B" : w >= 0.5 ? "C" : "D");
 /** 卡片用哪一組回測數字（網頁 index.html 的 planStat 要跟這裡一致） */
+const AVOID = ["surge", "cold", "noinst", "k1lu4"];
 function planStat(st, e, k, grp) {
   let s = st(grp, k), note = grp;
   if (!s || s.n < 8) { s = st(e.k === 1 ? "k1" : "k2", k); note = e.k === 1 ? "k1" : "k2"; }
@@ -674,8 +686,11 @@ function planStat(st, e, k, grp) {
     const x = st(g, "B");
     if (x && x.n >= 8) { s = x; note = g; }
   }
-  if (e.vs != null && e.vs >= 6 && KIND[k] !== "short") { const x = st("surge", k); if (x && x.n >= 8) { s = x; note = "surge"; } }
-  if (e.amt != null && e.amt < 1 && KIND[k] !== "short") { const x = st("cold", k); if (x && x.n >= 8) { s = x; note = "cold"; } }
+  if (KIND[k] !== "short") {
+    let flagged = false; // 避開旗標：套用其中回測最差的一組
+    for (const g of AVOID) { if (!GROUP_FN[g](e)) continue; const x = st(g, k); if (x && x.n >= 8 && (!s || x.win < s.win)) { s = x; note = g; flagged = true; } }
+    if (!flagged && e.insti != null && e.insti <= -3) { const g = e.k === 1 ? "k1ib" : "k2ib", x = st(g, k); if (x && x.n >= 8) { s = x; note = g; } }
+  }
   return { st: s, note };
 }
 function planItems(events, stats) {
@@ -935,6 +950,7 @@ async function main() {
     const bars = barsOf.get(`${ev.mkt}${ev.code}`) || [];
     const s = bars.findIndex((b) => b.d >= ev.start);
     if (s >= 3) instDates.push(bars[s - 3].d, bars[s - 2].d, bars[s - 1].d);
+    else if (s < 0 && bars.length >= 3) instDates.push(...bars.slice(-3).map((b) => b.d)); // 已公告、明天才開始處置
   }
   let inst = null;
   try { inst = await instLoader(instDates); } catch (e) { console.log(`   ⚠ 法人資料：${e.message}`); }
@@ -948,8 +964,9 @@ async function main() {
     const a = bars.length ? analyse(ev, bars, ctx) : null;
     if (a) events.push(a);
     else if (bars.length && ev.start > bars[bars.length - 1].d) {
-      upcoming.push({ code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, status: "pre", close: bars[bars.length - 1].c, gap: null, fut: futures ? (futures.has(ev.code) ? 1 : 0) : null, next: ["B", "P2", "D1", "L5", "L7", "L10"], r: {}, dow: new Date(`${ev.start}T12:00:00`).getDay(),
-        ...(({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs }) => ({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs }))(preFeatures(bars, bars.length - 1)) });
+      const i3 = inst ? inst(ev.mkt, ev.code, bars.slice(-3).map((b) => b.d)) : null, pfU = preFeatures(bars, bars.length - 1);
+      upcoming.push({ inst3: i3, insti: i3 != null && pfU.preVol ? Math.round(i3 / (pfU.preVol * 3) * 1000) / 10 : null, code: ev.code, name: ev.name, mkt: ev.mkt, k: ev.k, pub: ev.pub, start: ev.start, end: ev.end, min: ev.min ?? null, status: "pre", close: bars[bars.length - 1].c, gap: null, fut: futures ? (futures.has(ev.code) ? 1 : 0) : null, next: ["B", "P2", "D1", "L5", "L7", "L10"], r: {}, dow: new Date(`${ev.start}T12:00:00`).getDay(),
+        ...(({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs, lu10, pv }) => ({ px0, bias20, run10, pubchg, amt, score, sf, preVol, vs, lu10, pv }))(preFeatures(bars, bars.length - 1)) });
     }
   }
   const stats = aggregate(events);

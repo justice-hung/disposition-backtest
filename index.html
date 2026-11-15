@@ -461,12 +461,16 @@ function rerender() { renderWatch(); renderPlan(); renderTrack(); renderEvents()
 /* ---------------- 明天作戰清單 ---------------- */
 // 依股價分組：回測發現股價 ≥100 元的處置股勝率明顯較高
 const grpOf = (k, p0) => (k === 1 ? (p0 >= 100 ? 'k1p' : 'k1l') : (p0 >= 100 ? 'k2p' : 'k2l'));
-const grpName = (g) => ({ k1p: '第一次・≥100元', k1l: '第一次・<100元', k2p: '第二次・≥100元', k2l: '第二次・<100元', k1s2g: '評分≥2＋開盤≤3%', k1s1: '評分≤1', cold: '冷門股', surge: '爆量股' })[g] || g;
+const grpName = (g) => ({ k1p: '第一次・≥100元', k1l: '第一次・<100元', k2p: '第二次・≥100元', k2l: '第二次・<100元', k1s2g: '評分≥2＋開盤≤3%', k1s1: '評分≤1', cold: '冷門股', surge: '爆量股', noinst: '法人沒參與', k1lu4: '評分低的飆股', k1ib: '第一次・法人大賣', k2ib: '第二次・法人大賣' })[g] || g;
+const AVOID = ['surge', 'cold', 'noinst', 'k1lu4'];
 const kindOf = (k) => (E[k] || {}).kind || 'close';
 const atOpen = (k) => kindOf(k) === 'open' || !!(E[k] || {}).open;
 const scoreChip = (o) => (o.score == null ? '' : `<span class="chip sc" title="${esc(((D.lab || {}).scoreNames || []).map((n, i) => (o.sf && o.sf[i] ? '✔ ' : '✘ ') + n).join('　'))}">評分 ${'★'.repeat(o.score)}${'☆'.repeat(3 - o.score)}</span>`)
   + (o.fut ? '<span class="chip fut" title="有股票期貨：可以用股期做多／放空或避險">期</span>' : '')
   + (o.vs != null && o.vs >= 6 ? `<span class="chip cold" title="處置前 5 日均量是更前 20 日的 ${o.vs} 倍；爆量 6 倍以上的回測勝率很差">爆量</span>` : '')
+  + ((o.g || []).includes('noinst') ? `<span class="chip cold" title="處置前 3 日法人買賣超不到成交量的 3%（幾乎沒有法人進出）；評分低或第二次處置遇到這種，回測勝率很差">無法人</span>` : '')
+  + ((o.g || []).includes('k1lu4') ? `<span class="chip cold" title="評分≤1，而且前 10 個交易日有 ${o.lu10} 次漲停；這種飆股回測勝率很差">飆股</span>` : '')
+  + (o.insti != null && o.insti <= -3 ? `<span class="chip hi" title="處置前 3 日法人賣超占成交量 ${Math.abs(o.insti)}%；回測反而是勝率最高的一組">法人大賣</span>` : '')
   + (o.amt != null && o.amt < 1 ? '<span class="chip cold" title="處置前 5 日均成交金額不到 1 億，回測勝率明顯最差">冷門</span>' : '');
 const tickOf = (p) => (p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5);
 const tickFloor = (p) => Math.round(Math.floor(p / tickOf(p) + 1e-9) * tickOf(p) * 100) / 100;
@@ -536,7 +540,7 @@ function buildActions() {
     const nx = e.next || [];
     if (!nx.length) continue;
     const grp = grpOf(e.k, e.px0);
-    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e), min: e.min, score: e.score, sf: e.sf, amt: e.amt, fut: e.fut, vs: e.vs };
+    const base = { code: e.code, name: e.name, mkt: e.mkt, k: e.k, grp, p0: e.px0, status: statusTxt(e), min: e.min, score: e.score, sf: e.sf, amt: e.amt, fut: e.fut, vs: e.vs, g: e.g, lu10: e.lu10, insti: e.insti };
     const bias = e.bias20 != null ? `乖離月線 <span class="num ${cls(e.bias20)}">${sgn(e.bias20, 0)}</span>` : '';
     // 掛低接：同一檔只列該組回測最好的一檔價位
     const lims = nx.filter((k) => kindOf(k) === 'limit' && !E[k].d1);
@@ -560,8 +564,11 @@ function buildActions() {
         st = stat('k1pg', 'B') || st; statNote = '≥100元＋開盤≤3%';
         extra = `開盤 ≤ <b class="num">${px(e.px0 * 1.03)}</b> 才買，跳空超過 3% 不追`;
       }
-      if (e.vs != null && e.vs >= 6 && kind !== 'short') { const x = stat('surge', k); if (x && x.n >= 8) { st = x; statNote = '爆量股'; } }
-      if (e.amt != null && e.amt < 1 && kind !== 'short') { const x = stat('cold', k); if (x && x.n >= 8) { st = x; statNote = '冷門股'; } }
+      if (kind !== 'short') { // 避開旗標：套用其中回測最差的一組（跟 backtest.mjs 的 planStat 一致）
+        let flagged = false;
+        for (const g2 of AVOID) { if (!(e.g || []).includes(g2)) continue; const x = stat(g2, k); if (x && x.n >= 8 && (!st || x.win < st.win)) { st = x; statNote = grpName(g2); flagged = true; } }
+        if (!flagged && e.insti != null && e.insti <= -3) { const g2 = e.k === 1 ? 'k1ib' : 'k2ib', x = stat(g2, k); if (x && x.n >= 8) { st = x; statNote = grpName(g2); } }
+      }
       if (kind === 'short') {
         const m = mgOf(e.code);
         extra = !m ? '融券／借券；要有券、漲幅風險無上限' : m[0] ? '可融券；漲幅風險無上限，部位放小' : `<span style="color:#fca5a5">不可融券${m[1] && m[1] !== '非信用交易標的' ? `（${esc(m[1])}）` : ''}，只能借券或跳過</span>`;
@@ -682,6 +689,9 @@ function renderLab() {
     `<b>處置前沒漲太多的比較好</b>：第一次處置、處置前 10 日漲幅 <30% 的 D1 開盤買 ${w('k1r', 'B')}，第一次全部是 ${w('k1', 'B')}。`,
     `<b>第二次處置要等跌</b>：公告日當天跌 ≥3% 的 D1 開盤買 ${w('k2pd', 'B')}，第二次全部只有 ${w('k2', 'B')}；沒跌的用掛低接（−7% ${w('k2', 'L7')}、−10% ${w('k2', 'L10')}）。`,
     (stat('k1s2', 'P2', 5) || {}).n ? `<b>D1 掛低一點等它來</b>：第一次處置、評分≥2，只在處置第 1 天掛「公告價−2%」，成交的勝率 ${w('k1s2', 'P2')}，直接開盤買是 ${w('k1s2', 'B')}；大約一半會買不到。已加進作戰清單的盤中掛單。` : '',
+    (stat('noinst', 'B', 5) || {}).n ? `<b>法人沒參與的避開，法人大賣的反而最好</b>：用處置前 3 日法人買賣超占成交量的比例看。評分≤1 或第二次處置、法人進出不到 3% 的，D1 開盤買只有 ${w('noinst', 'B')}。法人賣超 ≥3% 的反而最高：第一次 ${w('k1ib', 'B')}、第二次 ${w('k2ib', 'B')}（第二次全部只有 ${w('k2', 'B')}）。卡片會標「無法人」或「法人大賣」，等級跟著調整。` : '',
+    (stat('k1lu4', 'B', 5) || {}).n ? `<b>評分低的飆股避開</b>：第一次處置、評分≤1，而且前 10 個交易日漲停 4 次以上的，D1 開盤買只有 ${w('k1lu4', 'B')}，第一次・評分≤1 整體是 ${w('k1s1', 'B')}。卡片會標紅色「飆股」。` : '',
+    (stat('k1pv2', 'B', 5) || {}).n ? `<b>公告日當天爆量的比較差</b>：第一次處置、公告日成交量是前 5 日均量 2 倍以上的 ${w('k1pv2', 'B')}，第一次全部 ${w('k1', 'B')}。樣本還少，先放分組觀察、沒有放進等級。` : '',
     (stat('surge', 'B', 5) || {}).n ? `<b>爆量股避開</b>：處置前 5 日均量是更前 20 日 6 倍以上的，D1 開盤買只有 ${w('surge', 'B')}。卡片會標紅色「爆量」。` : '',
     D.stats.k1p300 ? `<b>行情差的時候，高價股和上市股撐得住</b>：第一次處置・股價≥300 的 D1 開盤買 ${w('k1p300', 'B')}；評分≥2 的上市股 ${w('k1s2tw', 'B')}；第二次處置掛低接−7% 上市 ${w('k2tw', 'L7')}、上櫃 ${w('k2otc', 'L7')}。` : '',
     D.stats.k1d12 ? `<b>週一、週二開始處置的比較好</b>：第一次處置 D1 開盤買，週一二開始 ${w('k1d12', 'B')}，週三～五開始 ${w('k1d35', 'B')}（抱 5 天會跨週末）。樣本還少，先當參考、沒有放進等級。` : '',
@@ -698,6 +708,10 @@ function renderLab() {
     '處置期間連跌 2～3 天後隔天開盤買、掛 10 日線／月線低接：勝率 4～5 成，沒有優勢。',
     '公告日漲停或一字鎖漲停、公告日留長上影線、是否在 60 日高點附近、樣本內第幾次被處置：分組後沒有穩定差異。',
     '同時處置中的檔數（處置股太多＝過熱？）：檔數少的時候確實比較好，但中間不是越多越差，沒辦法當門檻用。',
+    '處置第 2～5 天才開盤買：越晚買越差（評分≥2 從第 1 天的 7 成一路掉到第 4 天的 4 成），要買就買第 1 天。',
+    '每天掛「前一天收盤−3%／−5%／−7%／跌停價」的當日單：沒有比固定掛公告價−7%、−10% 好。',
+    '處置前的波動大小、20 日漲幅、距 60 日低點漲幅、連漲天數、趨勢是否平順、距近 5 日高點回落、公告日收盤在當天高低點的位置、5 日線乖離：分組後沒有穩定差異。',
+    '處置第 1 天的量縮程度、開高走低或開低走高，用來決定第 2 天買不買：沒有規律。',
     '大盤短線漲跌（公告日前 5 日、10 日、當天的加權指數漲跌幅）：分組後勝率忽高忽低，沒辦法當進場門檻。',
     '市值、股本、外資持股比（上市樣本）：市值越大勝率越高，但市值 300 億以上的全部都是評分≥2，同樣評分下沒有再多出優勢，所以不另外加。',
     '產業別、同產業同時處置檔數：電子類看起來比非電子好，但控制評分後就沒有差別，各產業樣本也太少。',
