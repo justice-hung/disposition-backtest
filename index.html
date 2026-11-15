@@ -310,7 +310,8 @@ table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
 const $ = (s) => document.querySelector(s);
 let D = null;
 const S = { hold: 5, group: 'k1p', entry: 'B', showD: false };
-try { const h = +localStorage.getItem('dbt.hold'); if ([3, 5, 10, 20].includes(h)) S.hold = h; } catch (e) {}
+try { const raw = localStorage.getItem('dbt.hold'), h = +raw; if ([3, 5, 10, 20].includes(h)) S.hold = h; else if (raw === 'X') S.hold = 'X'; } catch (e) {}
+const holdName = (H) => (H === 'X' ? '放到出關' : `抱 ${H} 天`);
 const pct = (x, d = 0) => (x == null ? '—' : (x * 100).toFixed(d) + '%');
 const sgn = (x, d = 1) => (x == null ? '—' : (x > 0 ? '+' : '') + (x * 100).toFixed(d) + '%');
 const cls = (x) => (x == null ? '' : x > 0 ? 'up' : x < 0 ? 'down' : '');
@@ -356,7 +357,7 @@ function renderMarket() {
   const cmp = (label, gUp, gDn, k) => `${label}${nameOf(k)}：月線上 <b>${w(gUp, k)}</b>、月線下 <b>${w(gDn, k)}</b>`;
   const lines = [cmp('全部・', 'mkUp', 'mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'B'), cmp('第二次・', 'k2mkUp', 'k2mkDn', 'L10')];
   $('#mktBanner').innerHTML = `<div class="banner ${M.above ? 'up' : 'dn'}">${M.above ? '✅' : '⚠️'} 大盤 ${md(M.date)} 收 <b>${M.c.toLocaleString()}</b>，${M.above ? '在' : '跌破'}月線（${M.ma20.toLocaleString()}）${M.above ? '' : '，處置股整體容易偏弱，部位放小'}。
-    <br><span style="font-size:12.5px">回測比較（處置公告時大盤位置，抱 ${H} 天勝率）：${lines.join('；')}</span></div>`;
+    <br><span style="font-size:12.5px">回測比較（處置公告時大盤位置，${holdName(H)}勝率）：${lines.join('；')}</span></div>`;
 }
 
 /* ---------------- 實戰紀錄 ---------------- */
@@ -530,10 +531,12 @@ function predCard(c) {
     <span class="code">${starBtn(c.code)}${c.code}</span><span class="nm">${kLink(c.code, c.name)}</span><span class="g g${hg}" title="過去命中率">${hr == null ? '?' : '中' + pct(hr)}</span>
     <div class="tags">${mk(c.mkt)}${kc(c.k)}<span class="chip ${c.close >= 100 ? 'hi' : 'lo'}">${c.close >= 100 ? '≥100元' : '<100元'}</span>${shChip(c.code)}<span class="chip">收 ${px(c.close)}（<span class="${cls(c.pct)}">${c.pct > 0 ? '+' : ''}${c.pct}%</span>）</span></div>
     <div class="what"><span class="chip">預判</span> 公告日收盤買 · ${cond}</div>
-    <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・抱${H}天勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
+    <div class="stat"><span>${hitTxt}</span>${st ? `<span>若成真・${holdName(H)}勝率 <b class="num" style="color:var(--t1)">${pct(st.win)}</b> <i class="g g${g}" style="height:18px;min-width:20px;font-size:11px">${g}</i></span><span>中位數 <b class="num ${cls(st.median)}">${sgn(st.median)}</b></span>` : ''}</div>
   </div>`;
 }
 
+// 選「到出關」時，出關後才進場的買點沒有這一欄，退回抱 5 天的數字
+const statP = (g, k) => stat(g, k) || (S.hold === 'X' ? stat(g, k, 5) : null);
 function buildActions() {
   const acts = [];
   for (const e of D.events) {
@@ -545,29 +548,29 @@ function buildActions() {
     // 掛低接：同一檔只列該組回測最好的一檔價位
     const lims = nx.filter((k) => kindOf(k) === 'limit' && !E[k].d1);
     let bestL = null;
-    for (const k of lims) { const st = stat(grp, k); const w = st && st.n >= 8 ? st.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
+    for (const k of lims) { const st = statP(grp, k); const w = st && st.n >= 8 ? st.win : -1; if (!bestL || w > bestL.w) bestL = { k, w }; }
     for (const k of nx) {
       const kind = kindOf(k);
       if (kind === 'limit' && !E[k].d1 && k !== (bestL && bestL.k)) continue;
-      let st = stat(grp, k), label = esc(nameOf(k)), extra = bias, statNote = grpName(grp);
+      let st = statP(grp, k), label = esc(nameOf(k)), extra = bias, statNote = grpName(grp);
       if (kind === 'limit') {
         const P = tickFloor(e.px0 * (1 - E[k].limit));
         label = `掛 <span class="num">${px(P)}</span> 限價買（公告價−${Math.round(E[k].limit * 100)}%）`;
         extra = E[k].d1 ? '只掛處置第 1 天，等開低或拉回；沒碰到就不買' : '處置期間有效，碰到才成交';
       }
-      if (!st || st.n < 8) { st = stat(e.k === 1 ? 'k1' : 'k2', k); statNote = e.k === 1 ? '第一次全部' : '第二次全部'; } // 分組樣本太少就退回大分組
+      if (!st || st.n < 8) { st = statP(e.k === 1 ? 'k1' : 'k2', k); statNote = e.k === 1 ? '第一次全部' : '第二次全部'; } // 分組樣本太少就退回大分組
       if (k === 'B' && e.k === 1 && e.score != null) { // 第一次處置的開盤買：照評分套用回測（跟 backtest.mjs 的 planStat 一致）
-        const g2 = e.score >= 2 ? 'k1s2g' : 'k1s1', x = stat(g2, 'B');
+        const g2 = e.score >= 2 ? 'k1s2g' : 'k1s1', x = statP(g2, 'B');
         if (x && x.n >= 8) { st = x; statNote = grpName(g2); }
         if (e.score >= 2) extra = `開盤 ≤ <b class="num">${px(e.px0 * 1.03)}</b> 才買，跳空超過 3% 不追`;
       } else if (k === 'B' && grp === 'k1p') {
-        st = stat('k1pg', 'B') || st; statNote = '≥100元＋開盤≤3%';
+        st = statP('k1pg', 'B') || st; statNote = '≥100元＋開盤≤3%';
         extra = `開盤 ≤ <b class="num">${px(e.px0 * 1.03)}</b> 才買，跳空超過 3% 不追`;
       }
       if (kind !== 'short') { // 避開旗標：套用其中回測最差的一組（跟 backtest.mjs 的 planStat 一致）
         let flagged = false;
-        for (const g2 of AVOID) { if (!(e.g || []).includes(g2)) continue; const x = stat(g2, k); if (x && x.n >= 8 && (!st || x.win < st.win)) { st = x; statNote = grpName(g2); flagged = true; } }
-        if (!flagged && e.insti != null && e.insti <= -3) { const g2 = e.k === 1 ? 'k1ib' : 'k2ib', x = stat(g2, k); if (x && x.n >= 8) { st = x; statNote = grpName(g2); } }
+        for (const g2 of AVOID) { if (!(e.g || []).includes(g2)) continue; const x = statP(g2, k); if (x && x.n >= 8 && (!st || x.win < st.win)) { st = x; statNote = grpName(g2); flagged = true; } }
+        if (!flagged && e.insti != null && e.insti <= -3) { const g2 = e.k === 1 ? 'k1ib' : 'k2ib', x = statP(g2, k); if (x && x.n >= 8) { st = x; statNote = grpName(g2); } }
       }
       if (kind === 'short') {
         const m = mgOf(e.code);
@@ -624,13 +627,13 @@ function renderPlan() {
 
 /* ---------------- 最佳買點 ---------------- */
 function renderTiles() {
-  $('#bestSub').textContent = `抱 ${S.hold} 天、樣本 ≥ ${D.minN} 件、只算實際做得到的買點（不含做空）`;
+  $('#bestSub').textContent = `${holdName(S.hold)}、樣本 ≥ ${D.minN} 件、只算實際做得到的買點（不含做空）`;
   const B = D.best[S.hold] || {};
   const t = D.stats.k1s2 ? [['k1s2', '第一次處置・評分≥2', 'var(--amber)'], ['k1s1', '第一次處置・評分≤1', '#a78bfa'], ['k2', '第二次處置', 'var(--rose)']]
     : [['k1p', '第一次處置・股價≥100', 'var(--amber)'], ['k1l', '第一次處置・股價<100', '#a78bfa'], ['k2', '第二次處置', 'var(--rose)']];
   $('#tiles').innerHTML = t.map(([g, label, c]) => {
     const b = B[g];
-    return `<div class="tile" style="--c:${c}"><div class="l">${label}・抱 ${S.hold} 天最佳</div>`
+    return `<div class="tile" style="--c:${c}"><div class="l">${label}・${holdName(S.hold)}最佳</div>`
       + (b ? `<div class="v">${nameOf(b.entry)}</div><div class="s">勝率 <b class="num" style="color:#fff">${pct(b.win)}</b> · 中位數 <span class="num ${cls(b.median)}">${sgn(b.median)}</span> · 回檔 <span class="num down">${sgn(b.dd)}</span> · n=${b.n}</div>`
         : `<div class="s" style="margin-top:6px">樣本還不夠</div>`) + `</div>`;
   }).join('');
@@ -648,7 +651,7 @@ function renderHeat() {
   const g = S.group;
   const tops = {};
   for (const H of D.holds) tops[H] = (D.best[H] || {})[g] && D.best[H][g].entry;
-  let h = `<tr><th class="l">買點</th>${D.holds.map((H) => `<th>抱 ${H} 天</th>`).join('')}</tr>`;
+  let h = `<tr><th class="l">買點</th>${D.holds.map((H) => `<th>${holdName(H)}</th>`).join('')}</tr>`;
   for (const e of D.entries) {
     h += `<tr class="${e.real ? '' : 'pred'}"><td class="e">${e.name}<span class="sub">${({ open: '開盤買', close: '收盤買', limit: '盤中掛單', short: e.open ? '開盤放空' : '收盤放空' })[e.kind] || '收盤買'}${e.real ? '' : '・需預判'}</span></td>`;
     for (const H of D.holds) {
@@ -656,7 +659,7 @@ function renderHeat() {
       if (!s) { h += `<td class="c na">—</td>`; continue; }
       const thin = s.n < D.minN;
       h += `<td class="c ${thin ? 'thin' : ''} ${tops[H] === e.key ? 'top' : ''} ${H === S.hold ? 'cur' : ''}" style="background:${thin ? 'rgba(15,23,42,.4)' : cellBg(s.win)}"
-        data-t="${esc(e.name)}・抱 ${H} 天|勝率 ${pct(s.win)}（n=${s.n}）|平均 ${sgn(s.mean)}・中位數 ${sgn(s.median)}|平均最大回檔 ${sgn(s.dd)}|${esc(e.desc)}">
+        data-t="${esc(e.name)}・${holdName(H)}|勝率 ${pct(s.win)}（n=${s.n}）|平均 ${sgn(s.mean)}・中位數 ${sgn(s.median)}|平均最大回檔 ${sgn(s.dd)}|${esc(e.desc)}">
         <span class="w">${pct(s.win)}</span><span class="m ${cls(s.median)}">${sgn(s.median)}</span></td>`;
     }
     h += '</tr>';
@@ -722,7 +725,7 @@ function renderLab() {
   $('#labConcl').innerHTML = ok.join('') + no.join('');
 
   // 評分表
-  $('#scoreSub').innerHTML = `${(L.scoreNames || []).join('、')}，各 1 分，公告當晚就知道。抱 ${H} 天勝率（下方＝平均報酬）。`;
+  $('#scoreSub').innerHTML = `${(L.scoreNames || []).join('、')}，各 1 分，公告當晚就知道。${holdName(H)}勝率（下方＝平均報酬）。`;
   const sc = (L.score || {})[H] || [];
   $('#scoreTable').innerHTML = '<tr><th class="l">評分</th><th>第一次・D1 開盤買</th><th>第二次・掛低接−7%</th></tr>'
     + sc.map((r) => `<tr><td class="l"><span class="star">${'★'.repeat(r.s)}<i>${'☆'.repeat(3 - r.s)}</i></span> ${r.s} 分</td>${cell(r.k1B)}${cell(r.k2L)}</tr>`).join('');
@@ -841,7 +844,7 @@ function renderEvents() {
   }
   const k = S.entry;
   const evs = D.events.filter((e) => Object.keys(e.r).length && inGroup(e, S.group)).sort((a, b) => b.start.localeCompare(a.start));
-  let h = `<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th>乖離月線</th><th class="l">買進日</th>${D.holds.map((x) => `<th>${x} 天</th>`).join('')}</tr>`;
+  let h = `<tr><th class="l">股票</th><th class="l">市場</th><th class="l">次數</th><th class="l">處置期間</th><th>乖離月線</th><th class="l">買進日</th>${D.holds.map((x) => `<th>${x === 'X' ? '到出關' : x + ' 天'}</th>`).join('')}</tr>`;
   for (const e of evs) {
     const r = e.r[k];
     h += `<tr><td class="l">${starBtn(e.code)}<span class="num" style="color:var(--sky)">${e.code}</span> ${kLink(e.code, e.name)}</td><td class="l">${mk(e.mkt)}</td><td class="l">${kc(e.k)}</td>
@@ -877,6 +880,7 @@ function renderNotes() {
     '點股票名稱可以看 K 線小圖（最近 60 天，標出處置期間、公告日、均線和低接掛單價）；點 ☆ 加入「我的追蹤」，追蹤清單只存在這台裝置的瀏覽器。',
     '評分：股價≥100 元、處置前 5 日均成交金額≥5 億、公告日月線乖離≤25%，各 1 分（0～3 分）。第一次處置的 D1 開盤買會依評分套用「評分≥2＋開盤≤3%」或「評分≤1」的回測數字；日均成交不到 1 億的冷門股改套「冷門股」分組的數字。這些門檻是用同一批資料找出來的，之後要看實戰紀錄有沒有跟上。',
     '出關首日開盤放空：處置結束後第 1 個交易日開盤融券／借券賣出。出場比較、資金曲線都是「每一筆都照做」的結果，資金曲線每筆投入相同金額、不複利。',
+    '持有天數選「到出關」＝不管哪一天買，都放到處置結束後第 1 個交易日開盤賣（出關後才進場的買點沒有這一欄）。第 1 天買的話跟抱 5 天差不多；第 3 天以後才買或掛低接成交的，用這個看比較準，因為抱 5 天會抱過出關。實戰紀錄仍然用抱 5 天結算。',
     '加停損反而變差：處置期間撮合慢、價格跳動大，固定 7% 停損或移動停損都讓勝率下降，所以回測都用固定持有天數。',
     '「平均最大回檔」＝持有期間最低價相對買價的跌幅平均，用來估停損空間。',
     '新制實施時間短、事件在時間上高度重疊，結果受大盤多空影響很大；請比較買點之間的相對好壞。歷史回測不代表未來。',
@@ -884,7 +888,7 @@ function renderNotes() {
 }
 
 function renderHold() {
-  seg($('#segHold'), D.holds.map((h) => [h, `${h}天`]), S.hold, (k) => {
+  seg($('#segHold'), D.holds.map((h) => [h, h === 'X' ? '到出關' : `${h}天`]), S.hold, (k) => {
     S.hold = k; try { localStorage.setItem('dbt.hold', k); } catch (e) {}
     renderHold(); renderMarket(); renderWatch(); renderPlan(); renderTiles(); renderLab(); renderHeat();
   });
@@ -898,6 +902,7 @@ function boot() {
   }
   E = Object.fromEntries(D.entries.map((e) => [e.key, e]));
   if (D.stats.k1s2) S.group = 'k1s2';
+  if (!D.holds.includes(S.hold)) S.hold = 5;
   renderMeta(); renderMarket(); renderHold(); renderWatch(); renderPlan(); renderTiles(); renderTrack(); renderLab(); renderDays(); renderHeat(); renderEvents(); renderNotes();
 }
 // 每次都抓最新的 data.js（避免瀏覽器快取舊資料）
